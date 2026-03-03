@@ -43,13 +43,23 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        // /owml (без аргументов) -> Открыть MainHubGUI
+        // /owml (без аргументов) -> Открыть StaffMenuGUI
         if (args.length == 0) {
-            if (!player.hasPermission("owml.gui")) {
+            if (!player.hasPermission("owml.staff")) {
                 player.sendMessage(Component.text("No permission!", NamedTextColor.RED));
                 return true;
             }
-            GUINavigationStack.push(player, new MainHubGUI(plugin));
+            GUINavigationStack.push(player, new net.denfry.owml.gui.StaffMenuGUI(plugin));
+            return true;
+        }
+
+        // /owml staff -> Открыть StaffMenuGUI
+        if (args[0].equalsIgnoreCase("staff")) {
+            if (!player.hasPermission("owml.staff")) {
+                player.sendMessage(Component.text("No permission!", NamedTextColor.RED));
+                return true;
+            }
+            GUINavigationStack.push(player, new net.denfry.owml.gui.StaffMenuGUI(plugin));
             return true;
         }
 

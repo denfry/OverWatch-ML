@@ -120,6 +120,9 @@ public class BlockListener implements Listener {
 
         context.getDecoyService().trackOreBreak(player, block, ore);
 
+        // Orchestrator trigger for Xray detection
+        context.getDetectionOrchestrator().runDetection(player, net.denfry.owml.detection.CheatCategory.XRAY);
+
         if (context.getDecoyService().isDecoy(loc)) {
             if (configManager.isCachedDebugEnabled()) {
                 plugin.getLogger().info("Decoy ore detected for " + player.getName() + " at " + formatLocation(loc));

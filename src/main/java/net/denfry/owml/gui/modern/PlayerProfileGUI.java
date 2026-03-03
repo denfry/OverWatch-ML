@@ -1,7 +1,8 @@
 package net.denfry.owml.gui.modern;
 
 import net.denfry.owml.OverWatchML;
-import net.denfry.owml.ml.ReasoningMLModel;
+import net.denfry.owml.detection.PlayerBehaviorProfile;
+import net.denfry.owml.detection.PlayerEventBuffer;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
@@ -13,6 +14,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
+import java.util.ArrayList;
 
 public class PlayerProfileGUI implements OverWatchGUI {
     private final OverWatchML plugin;
@@ -40,65 +42,79 @@ public class PlayerProfileGUI implements OverWatchGUI {
     @Override
     public void refresh(Player player) {
         OfflinePlayer op = Bukkit.getOfflinePlayer(targetId);
-        int score = plugin.getSuspicionLevel(op.getName());
-        ReasoningMLModel.DetectionResult mlResult = plugin.getMLManager().getDetectionResults().get(targetId);
+        PlayerBehaviorProfile profile = plugin.getContext().getProfileManager().getProfile(targetId);
+        PlayerEventBuffer buffer = plugin.getContext().getProfileManager().getEventBuffer(targetId);
         
         String status = op.isOnline() ? "§aOnline" : "§7Offline";
-        String verdict = (mlResult != null) ? mlResult.getConclusion() : "§7No data";
-        double confidence = (mlResult != null) ? mlResult.getProbability() * 100 : 0;
-        String regDate = dateFormat.format(new Date(op.getFirstPlayed()));
+        String lastAnalysis = dateFormat.format(new Date(profile.getLastAnalysisTime()));
 
-        // --- Шапка (0-8) ---
+        // --- Header (0-8) ---
         inventory.setItem(4, ItemBuilder.material(Material.PLAYER_HEAD)
                 .skull(op.getName())
                 .name("§b" + op.getName())
-                .lore(List.of(
+                .lore(LoreFormatter.format(List.of(
                         "§7Status: " + status,
-                        "§7Verdict: " + verdict,
-                        "§7Confidence: §e" + String.format("%.1f%%", confidence),
-                        "§7Registered: §f" + regDate
-                )).build());
+                        "§7Last Analysis: §f" + lastAnalysis,
+                        "§7Overall Suspicion: " + getOverallSuspicion(profile),
+                        "§7First Seen: §f" + dateFormat.format(new Date(op.getFirstPlayed()))
+                ))).build());
 
-        Material glassMat = score > 80 ? Material.RED_STAINED_GLASS_PANE :
-                           (score > 40 ? Material.YELLOW_STAINED_GLASS_PANE : Material.LIME_STAINED_GLASS_PANE);
-        inventory.setItem(3, ItemBuilder.material(glassMat).name(" ").build());
-        inventory.setItem(5, ItemBuilder.material(glassMat).name(" ").build());
+        // Category Scores
+        inventory.setItem(10, getCategoryItem(Material.DIAMOND_ORE, "Xray", profile.getDetectionScore("xray")));
+        inventory.setItem(12, getCategoryItem(Material.IRON_SWORD, "Combat", profile.getDetectionScore("combat")));
+        inventory.setItem(14, getCategoryItem(Material.FEATHER, "Movement", profile.getDetectionScore("movement")));
+        inventory.setItem(16, getCategoryItem(Material.SCAFFOLDING, "World/Scaffold", profile.getDetectionScore("world")));
 
-        // Xray Status (0)
-        Material xrayMat = score > 60 ? Material.DIAMOND : Material.EMERALD;
-        inventory.setItem(0, ItemBuilder.material(xrayMat)
-                .name("§bXray Status")
-                .lore(List.of(
-                        "§7Xray Score: §e" + score,
-                        "§7Ore Find Rate: §fAbove Normal",
-                        "§7Decoy Interactions: §c4 detected",
-                        "§7Last Episode: §fJust now at 120, 12, -450"
-                )).build());
+        // --- Recent Events (Lower Section) ---
+        List<PlayerEventBuffer.BehavioralEvent> events = buffer.getEvents();
+        int eventSlot = 28;
+        int maxEvents = 16;
+        
+        inventory.setItem(19, ItemBuilder.material(Material.BOOK).name("§eRecent Behavioral Events").build());
+        
+        for (int i = 0; i < Math.min(events.size(), maxEvents); i++) {
+            PlayerEventBuffer.BehavioralEvent event = events.get(events.size() - 1 - i); // Newest first
+            inventory.setItem(eventSlot + i + (i/8)*1, ItemBuilder.material(getEventMaterial(event.eventType()))
+                    .name("§f" + event.eventType().toUpperCase())
+                    .lore(List.of(
+                            "§7Time: §f" + new SimpleDateFormat("HH:mm:ss").format(new Date(event.timestamp())),
+                            "§7Value: §e" + event.value(),
+                            "§7Context: §7" + event.context().toString()
+                    )).build());
+        }
 
-        // Combat Status (8)
-        inventory.setItem(8, ItemBuilder.material(Material.IRON_SWORD)
-                .name("§cCombat Status")
-                .lore(List.of(
-                        "§7Combat Score: §e12",
-                        "§7Headshot %: §f14%",
-                        "§7Model Deviation: §aNormal",
-                        "§7Suspicious Fights: §f0 recorded"
-                )).build());
-
-        // --- Детали (Средняя часть) ---
-        inventory.setItem(19, ItemBuilder.material(Material.BOOK).name("§eActivity Timeline").build());
-        inventory.setItem(21, ItemBuilder.material(Material.IRON_PICKAXE).name("§7Mining History").build());
-        inventory.setItem(23, ItemBuilder.material(Material.BLAZE_ROD).name("§cCombat History").build());
-        inventory.setItem(25, ItemBuilder.material(Material.COMPASS).name("§dBehavioral Profile").build());
-
-        // --- Действия (Нижняя часть) ---
-        inventory.setItem(37, ItemBuilder.material(Material.ENDER_EYE).name("§3Watch Player").build());
-        inventory.setItem(39, ItemBuilder.material(Material.YELLOW_DYE).name("§eWarn Player").build());
-        inventory.setItem(41, ItemBuilder.material(Material.RED_DYE).name("§cPunish Player").build());
-        inventory.setItem(43, ItemBuilder.material(Material.LIME_DYE).name("§aMark as Legit").build());
-        inventory.setItem(45, ItemBuilder.material(Material.PAPER).name("§fPunishment History").build());
-        inventory.setItem(49, ItemBuilder.material(Material.WRITABLE_BOOK).name("§6Export Report").build());
+        // --- Actions (Bottom) ---
+        inventory.setItem(45, ItemBuilder.material(Material.PAPER).name("§fFull Statistics").build());
+        inventory.setItem(47, ItemBuilder.material(Material.ENDER_EYE).name("§3Teleport to Player").build());
+        inventory.setItem(49, ItemBuilder.material(Material.YELLOW_DYE).name("§eWarn Player").build());
+        inventory.setItem(51, ItemBuilder.material(Material.RED_DYE).name("§cPunish Player").build());
         inventory.setItem(53, ItemBuilder.material(Material.ARROW).name("§7Back").build());
+    }
+
+    private String getOverallSuspicion(PlayerBehaviorProfile profile) {
+        double maxScore = profile.getDetectionScores().values().stream().max(Double::compare).orElse(0.0);
+        String color = maxScore > 0.8 ? "§c" : (maxScore > 0.5 ? "§6" : "§a");
+        return color + String.format("%.0f%%", maxScore * 100);
+    }
+
+    private org.bukkit.inventory.ItemStack getCategoryItem(Material mat, String name, double score) {
+        String color = score > 0.8 ? "§c" : (score > 0.5 ? "§6" : "§a");
+        return ItemBuilder.material(mat)
+                .name(color + name + " Detection")
+                .lore(List.of(
+                        "§7Current Score: " + color + String.format("%.1f%%", score * 100),
+                        "§7Status: " + (score > 0.8 ? "§4CRITICAL" : (score > 0.5 ? "§6SUSPICIOUS" : "§aSAFE"))
+                )).build();
+    }
+
+    private Material getEventMaterial(String type) {
+        return switch (type.toLowerCase()) {
+            case "move" -> Material.FEATHER;
+            case "combat_hit" -> Material.REDSTONE;
+            case "place" -> Material.BRICKS;
+            case "interact" -> Material.LEVER;
+            default -> Material.PAPER;
+        };
     }
 
     @Override
@@ -108,32 +124,26 @@ public class PlayerProfileGUI implements OverWatchGUI {
         OfflinePlayer op = Bukkit.getOfflinePlayer(targetId);
 
         switch (slot) {
-            case 37: // Watch
+            case 47: // Teleport
                 if (op.isOnline()) {
                     player.closeInventory();
                     player.teleport(op.getPlayer());
                     player.sendMessage("§aTeleported to " + op.getName());
+                    GUIEffects.playSuccess(player);
                 } else {
                     GUIEffects.playError(player);
                     player.sendMessage("§cPlayer is offline.");
                 }
                 break;
-            case 39: // Warn
+            case 49: // Warn
                 GUIEffects.showConfirmDialog(player, "Warn " + op.getName() + "?", () -> {
-                    player.sendMessage("§ePlayer warned for suspicious mining.");
+                    player.sendMessage("§ePlayer warned for suspicious behavior.");
                     GUIEffects.playSuccess(player);
                 });
                 break;
-            case 41: // Punish
-                player.sendMessage("§cOpening Punishment Dialog...");
-                break;
-            case 43: // Mark as Legit
-                player.sendMessage("§aPlayer marked as legit. Retraining ML...");
-                GUIEffects.playSuccess(player);
-                break;
-            case 49: // Export
-                player.sendMessage("§6Report exported to: §f/plugins/OverWatchML/reports/" + op.getName() + ".txt");
-                GUIEffects.playSuccess(player);
+            case 51: // Punish
+                player.sendMessage("§cOpening Punishment Panel...");
+                GUINavigationStack.push(player, new PunishmentPanelGUI(plugin, targetId));
                 break;
             case 53: // Back
                 GUINavigationStack.pop(player);

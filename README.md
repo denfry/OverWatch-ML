@@ -2,10 +2,12 @@
 
 **Intelligent Cheat Detection Powered by Behavior**
 
-![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)
+![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Java](https://img.shields.io/badge/Java-21+-red.svg)
 ![Paper](https://img.shields.io/badge/Paper-1.21-orange.svg)
+![bStats Servers](https://img.shields.io/bstats/servers/29877?style=flat&logo=apache&color=informational)
+![bStats Players](https://img.shields.io/bstats/players/29877?style=flat&logo=apache&color=informational)
 
 ## Overview
 

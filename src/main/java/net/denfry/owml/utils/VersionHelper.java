@@ -3,11 +3,8 @@ package net.denfry.owml.utils;
 import org.bukkit.Bukkit;
 
 /**
- * Version compatibility helper for different Minecraft versions.
- *
- * @author OverWatch Team
- * @version 1.0.0
- * @since 1.8.3
+ * Version helper for Minecraft 1.21+.
+ * Support for older versions has been dropped.
  */
 public class VersionHelper {
 
@@ -28,18 +25,20 @@ public class VersionHelper {
      */
     private static void parseVersion() {
         try {
-            // Extract version from string like "git-Paper-318 (MC: 1.20.4)"
             String versionString = Bukkit.getServer().getBukkitVersion();
             String[] parts = versionString.split("\\.");
 
             if (parts.length >= 2) {
                 majorVersion = Integer.parseInt(parts[0]);
                 minorVersion = Integer.parseInt(parts[1]);
+            } else {
+                // Default to 1.21 if parsing fails
+                majorVersion = 1;
+                minorVersion = 21;
             }
         } catch (Exception e) {
-            // Fallback to default
             majorVersion = 1;
-            minorVersion = 20;
+            minorVersion = 21;
         }
     }
 
@@ -72,30 +71,18 @@ public class VersionHelper {
     }
 
     /**
-     * Check if the server version is exactly the specified version
-     */
-    public static boolean isVersionExactly(int major, int minor) {
-        return majorVersion == major && minorVersion == minor;
-    }
-
-    /**
-     * Check if the server supports a specific feature
+     * Check if the server supports a specific feature.
+     * Since we only support 1.21+, most features are natively supported.
      */
     public static boolean supportsFeature(String feature) {
-        return switch (feature.toLowerCase()) {
-            case "hex_colors" -> isVersionAtLeast(1, 16);
-            case "advancements" -> isVersionAtLeast(1, 12);
-            case "custom_biomes" -> isVersionAtLeast(1, 18);
-            case "bundle_api" -> isVersionAtLeast(1, 17);
-            default -> false;
-        };
+        return true; // 1.21+ supports hex colors, advancements, custom biomes, etc.
     }
 
     /**
      * Get version-specific information
      */
     public static String getVersionInfo() {
-        return String.format("Minecraft %d.%d (%s)",
+        return String.format("Minecraft %d.%d (%s) - Modern Mode Enabled",
             majorVersion, minorVersion, getServerVersion());
     }
 }

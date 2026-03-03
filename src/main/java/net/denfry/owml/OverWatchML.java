@@ -86,49 +86,44 @@ public class OverWatchML extends JavaPlugin {
             MessageManager.logBrand();
             MessageManager.logSystemInfo();
             
-            // Phase 2: Version compatibility initialization
+            // Phase 2: Configuration setup
             long phaseStart = System.currentTimeMillis();
-            initializeVersionCompatibility();
-            MessageManager.logStartup("Phase 2 (Environment) completed in {TIME}ms", "TIME", System.currentTimeMillis() - phaseStart);
-
-            // Phase 3: Configuration setup
-            phaseStart = System.currentTimeMillis();
             initializeBasics();
             setupConfiguration();
             context = new OverWatchContext(this, configManager);
             context.loadAll();
-            MessageManager.logStartup("Phase 3 (Config) completed in {TIME}ms", "TIME", System.currentTimeMillis() - phaseStart);
+            MessageManager.logStartup("Phase 2 (Config) completed in {TIME}ms", "TIME", System.currentTimeMillis() - phaseStart);
 
-            // Phase 4: Storage system
+            // Phase 3: Storage system
             phaseStart = System.currentTimeMillis();
             initializeStorage();
-            MessageManager.logStartup("Phase 4 (Storage) completed in {TIME}ms", "TIME", System.currentTimeMillis() - phaseStart);
+            MessageManager.logStartup("Phase 3 (Storage) completed in {TIME}ms", "TIME", System.currentTimeMillis() - phaseStart);
 
-            // Phase 5: Core managers
+            // Phase 4: Core managers
             phaseStart = System.currentTimeMillis();
             initializeManagers();
             initializeSecurity();
-            MessageManager.logStartup("Phase 5 (Managers) completed in {TIME}ms", "TIME", System.currentTimeMillis() - phaseStart);
+            MessageManager.logStartup("Phase 4 (Managers) completed in {TIME}ms", "TIME", System.currentTimeMillis() - phaseStart);
 
-            // Phase 6: Advanced systems & Integrations
+            // Phase 5: Advanced systems & Integrations
             phaseStart = System.currentTimeMillis();
             initializeAdvancedSystems();
             initializeIntegrations();
-            MessageManager.logStartup("Phase 6 (Systems) completed in {TIME}ms", "TIME", System.currentTimeMillis() - phaseStart);
+            MessageManager.logStartup("Phase 5 (Systems) completed in {TIME}ms", "TIME", System.currentTimeMillis() - phaseStart);
 
-            // Phase 7: Event listeners & ML
+            // Phase 6: Event listeners & ML
             phaseStart = System.currentTimeMillis();
             registerEventListeners();
             initializeMLSystem();
-            MessageManager.logStartup("Phase 7 (Events & ML) completed in {TIME}ms", "TIME", System.currentTimeMillis() - phaseStart);
+            MessageManager.logStartup("Phase 6 (Events & ML) completed in {TIME}ms", "TIME", System.currentTimeMillis() - phaseStart);
 
-            // Phase 8: Commands & GUI
+            // Phase 7: Commands & GUI
             phaseStart = System.currentTimeMillis();
             setupCommands();
             configureAutoSave();
             this.guiManager = new net.denfry.owml.gui.modern.GUIManager(this);
             getServer().getPluginManager().registerEvents(guiManager, this);
-            MessageManager.logStartup("Phase 8 (Commands & GUI) completed in {TIME}ms", "TIME", System.currentTimeMillis() - phaseStart);
+            MessageManager.logStartup("Phase 7 (Commands & GUI) completed in {TIME}ms", "TIME", System.currentTimeMillis() - phaseStart);
 
             // Final Phase: Cleanup and start
             finalizeInitialization();
@@ -137,30 +132,13 @@ public class OverWatchML extends JavaPlugin {
 
             long totalTime = System.currentTimeMillis() - startupTime;
             MessageManager.logStartup("§aPlugin successfully enabled in §e{TIME}ms", "TIME", totalTime);
-            MessageManager.logStartup("§aCurrent protection level: §f" + (mlManager != null && mlManager.isTrained() ? "§aFULL" : "§eBASIC (ML NOT TRAINED)"));
+            MessageManager.logStartup("§aTarget Version: 1.21+ (Modern API Only)");
 
         } catch (Exception e) {
             MessageManager.logStartup("CRITICAL ERROR - Failed to enable plugin: {ERROR}", "ERROR", e.getMessage());
             e.printStackTrace();
             getServer().getPluginManager().disablePlugin(this);
         }
-    }
-
-    /**
-     * Phase 0: Version compatibility initialization.
-     */
-    private void initializeVersionCompatibility() {
-        // Initialize version detection
-        VersionHelper.initialize();
-
-        // Initialize material helper for version compatibility
-        MaterialHelper.initialize();
-
-        // Initialize text utilities with appropriate provider
-        TextUtils.initialize();
-
-        MessageManager.logInit("Version Compatibility", "Initialized for Minecraft {VERSION}",
-            "VERSION", VersionHelper.getServerVersion());
     }
 
     /**
@@ -201,7 +179,7 @@ public class OverWatchML extends JavaPlugin {
     private void setupMetricsAndServices() {
         appealManager = new AppealManager(this);
 
-        int pluginId = 25174;
+        int pluginId = 29877;
         Metrics metrics = new Metrics(this, pluginId);
         MessageManager.logInit("Metrics System", "bStats enabled with plugin ID: {ID}", "ID", pluginId);
 
@@ -350,6 +328,12 @@ public class OverWatchML extends JavaPlugin {
         // ML v2 Listener
         getServer().getPluginManager().registerEvents(
                 new net.denfry.owml.ml.v2.listeners.MLDataListener(this, context.getDetectionPipeline()),
+                this
+        );
+
+        // Cheat listener for various detections
+        getServer().getPluginManager().registerEvents(
+                new net.denfry.owml.listeners.CheatListener(this, context),
                 this
         );
 
@@ -550,7 +534,14 @@ public class OverWatchML extends JavaPlugin {
         MessageManager.logStartup("Plugin shutdown initiated");
 
         try {
-            // Save all data
+            // Context shutdown
+            if (context != null) {
+                context.saveAll();
+                context.shutdown();
+                MessageManager.logStartup("OverWatch context shut down successfully");
+            }
+
+            // Save all data (Legacy managers - to be removed eventually)
             StatsManager.saveAllData();
             SuspiciousManager.saveAllData();
 

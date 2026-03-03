@@ -1,6 +1,10 @@
 package net.denfry.owml;
 
+import java.util.ArrayList;
 import net.denfry.owml.config.ConfigManager;
+import net.denfry.owml.detection.BehaviorProfileManager;
+import net.denfry.owml.detection.DetectionOrchestrator;
+import net.denfry.owml.integrations.AntiCheatIntegration;
 import net.denfry.owml.managers.DecoyService;
 import net.denfry.owml.managers.IDecoyService;
 import net.denfry.owml.managers.IStatsService;
@@ -17,6 +21,8 @@ public class OverWatchContext {
     private final ISuspiciousService suspiciousService;
     private final IDecoyService decoyService;
     private final DetectionPipeline detectionPipeline;
+    private final BehaviorProfileManager profileManager;
+    private final DetectionOrchestrator detectionOrchestrator;
 
     public OverWatchContext(OverWatchML plugin, ConfigManager configManager) {
         this.plugin = plugin;
@@ -38,6 +44,10 @@ public class OverWatchContext {
 
         // ML v2 Pipeline
         this.detectionPipeline = new DetectionPipeline(plugin);
+
+        // Architectural refactoring: BehaviorProfileManager and DetectionOrchestrator
+        this.profileManager = new BehaviorProfileManager();
+        this.detectionOrchestrator = new DetectionOrchestrator(plugin, profileManager, new ArrayList<AntiCheatIntegration>());
     }
 
     public void loadAll() {
@@ -52,6 +62,7 @@ public class OverWatchContext {
 
     public void shutdown() {
         detectionPipeline.shutdown();
+        detectionOrchestrator.shutdown();
     }
 
     public IStatsService getStatsService() {
@@ -68,5 +79,13 @@ public class OverWatchContext {
 
     public DetectionPipeline getDetectionPipeline() {
         return detectionPipeline;
+    }
+
+    public BehaviorProfileManager getProfileManager() {
+        return profileManager;
+    }
+
+    public DetectionOrchestrator getDetectionOrchestrator() {
+        return detectionOrchestrator;
     }
 }

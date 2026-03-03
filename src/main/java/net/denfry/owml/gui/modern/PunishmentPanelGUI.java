@@ -28,6 +28,12 @@ public class PunishmentPanelGUI implements OverWatchGUI {
         this.inventory = Bukkit.createInventory(this, 54, "Punishment Control Panel");
     }
 
+    public PunishmentPanelGUI(OverWatchML plugin, UUID targetId) {
+        this.plugin = plugin;
+        this.selectedPlayerId = targetId;
+        this.inventory = Bukkit.createInventory(this, 54, "Punishment Control Panel");
+    }
+
     public static class PunishmentRecord {
         String playerName;
         String type;

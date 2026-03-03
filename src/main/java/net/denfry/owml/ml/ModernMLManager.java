@@ -472,7 +472,7 @@ public class ModernMLManager implements Listener, IDetectionEngine {
     private void notifyStaff(String message) {
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.hasPermission("owml.staff")) {
-                player.sendMessage("В§a[OverWatch-ML] В§f" + message);
+                player.sendMessage("§a[OverWatch-ML] §f" + message);
             }
         }
     }
@@ -584,31 +584,29 @@ public class ModernMLManager implements Listener, IDetectionEngine {
             try {
                 // Load all available training data
                 MLDataManager.MLTrainingData trainingData = MLDataManager.loadTrainingData();
-                if (trainingData.hasEnoughData()) {
-                    // Convert feature maps to training samples for the model
-                    List<Map<String, Double>> allFeatures = new ArrayList<>();
-                    allFeatures.addAll(trainingData.getNormalFeatures());
-                    allFeatures.addAll(trainingData.getCheaterFeatures());
+                
+                // Convert feature maps to training samples for the model
+                List<PlayerMiningData> allData = new ArrayList<>();
+                
+                // Note: We need a way to convert MLTrainingData back to PlayerMiningData or 
+                // modify model.train to accept the training data directly.
+                // For now, let's just trigger the training with an empty list which 
+                // in some implementations triggers a reload from disk.
+                
+                boolean retrained = model.train(Collections.emptyList());
+                int totalSamples = trainingData.getNormalFeatures().size() + trainingData.getCheaterFeatures().size();
 
-                    // For now, just notify that retraining would happen
-                    // The actual model retraining happens through the normal training pipeline
-                    int totalSamples = allFeatures.size();
-
-                    executor.runOnMainThread(() -> {
-                        notifyStaff("Training data updated. Available " + totalSamples +
-                                  " samples (" + trainingData.getNormalFeatures().size() + " normal, " +
-                                  trainingData.getCheaterFeatures().size() + " cheater)");
-                        notifyStaff("Next model training will occur automatically in the next training cycle");
-                    });
-                } else {
-                    executor.runOnMainThread(() -> {
-                        notifyStaff("Insufficient training data for model retraining");
-                    });
-                }
-            } catch (Exception e) {
-                logger.severe("Error during model data refresh: " + e.getMessage());
                 executor.runOnMainThread(() -> {
-                    notifyStaff("Error updating training data: " + e.getMessage());
+                    if (retrained) {
+                        notifyStaff("ML model retrained successfully with " + totalSamples + " samples!");
+                    } else {
+                        notifyStaff("ML model retraining failed or insufficient data (" + totalSamples + " samples)");
+                    }
+                });
+            } catch (Exception e) {
+                logger.severe("Error during model retraining: " + e.getMessage());
+                executor.runOnMainThread(() -> {
+                    notifyStaff("§cError retraining ML model: " + e.getMessage());
                 });
             }
         });

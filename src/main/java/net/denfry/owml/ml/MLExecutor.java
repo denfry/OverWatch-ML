@@ -9,7 +9,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
 
 /**
- * РђСЃРёРЅС…СЂРѕРЅРЅС‹Р№ РёСЃРїРѕР»РЅРёС‚РµР»СЊ РґР»СЏ ML РѕРїРµСЂР°С†РёР№ СЃ graceful shutdown
+ * Asynchronous executor for ML operations with graceful shutdown
  */
 public class MLExecutor {
 
@@ -51,7 +51,7 @@ public class MLExecutor {
     }
 
     /**
-     * Р’С‹РїРѕР»РЅСЏРµС‚ С‚СЏР¶РµР»СѓСЋ ML РѕРїРµСЂР°С†РёСЋ Р°СЃРёРЅС…СЂРѕРЅРЅРѕ
+     * Executes heavy ML operation asynchronously
      */
     public <T> CompletableFuture<T> submitMLTask(Callable<T> task) {
         if (shuttingDown) {
@@ -69,7 +69,7 @@ public class MLExecutor {
     }
 
     /**
-     * Р’С‹РїРѕР»РЅСЏРµС‚ Р·Р°РґР°С‡Сѓ РЅР° main thread Bukkit
+     * Executes task on Bukkit main thread
      */
     public void runOnMainThread(Runnable task) {
         if (shuttingDown) {
@@ -80,7 +80,7 @@ public class MLExecutor {
     }
 
     /**
-     * Р’С‹РїРѕР»РЅСЏРµС‚ Р·Р°РґР°С‡Сѓ РЅР° main thread СЃ СЂРµР·СѓР»СЊС‚Р°С‚РѕРј
+     * Executes task on main thread with result
      */
     public <T> CompletableFuture<T> runOnMainThread(Callable<T> task) {
         CompletableFuture<T> future = new CompletableFuture<>();
@@ -98,7 +98,7 @@ public class MLExecutor {
     }
 
     /**
-     * РџР»Р°РЅРёСЂСѓРµС‚ РїРµСЂРёРѕРґРёС‡РµСЃРєСѓСЋ Р·Р°РґР°С‡Сѓ РѕР±СЃР»СѓР¶РёРІР°РЅРёСЏ
+     * Schedules periodic maintenance task
      */
     public ScheduledFuture<?> scheduleMaintenance(Runnable task, long initialDelay, long period, TimeUnit unit) {
         if (shuttingDown) {
@@ -118,7 +118,7 @@ public class MLExecutor {
     }
 
     /**
-     * Р’С‹РїРѕР»РЅСЏРµС‚ Р·Р°РґР°С‡Сѓ РїРѕСЃР»РµРґРѕРІР°С‚РµР»СЊРЅРѕ (РґР»СЏ РѕРїРµСЂР°С†РёР№ С‚СЂРµР±СѓСЋС‰РёС… РїРѕСЂСЏРґРєР°)
+     * Executes task sequentially (for operations requiring order)
      */
     public CompletableFuture<Void> submitSequentialTask(Runnable task) {
         if (shuttingDown) {
@@ -138,7 +138,7 @@ public class MLExecutor {
     }
 
     /**
-     * Graceful shutdown РІСЃРµС… executors
+     * Graceful shutdown of all executors
      */
     public void shutdown() {
         logger.info("Shutting down ML Executor...");
@@ -165,7 +165,7 @@ public class MLExecutor {
     }
 
     /**
-     * Helper method РґР»СЏ shutdown executor СЃ Р»РѕРіРёСЂРѕРІР°РЅРёРµРј
+     * Helper method for executor shutdown with logging
      */
     private void shutdownExecutor(ExecutorService executor, String name) {
         executor.shutdown();
@@ -188,14 +188,14 @@ public class MLExecutor {
     }
 
     /**
-     * РџСЂРѕРІРµСЂСЏРµС‚, Р·Р°РІРµСЂС€Р°РµС‚СЃСЏ Р»Рё СЂР°Р±РѕС‚Р°
+     * Checks if executor is shutting down
      */
     public boolean isShuttingDown() {
         return shuttingDown;
     }
 
     /**
-     * РџРѕР»СѓС‡Р°РµС‚ СЃС‚Р°С‚РёСЃС‚РёРєСѓ РёСЃРїРѕР»РЅРёС‚РµР»РµР№
+     * Gets executor statistics
      */
     public String getStats() {
         return String.format("ML Executor Stats: Workers=%d, Maintenance=1, Sequential=1",
@@ -203,7 +203,7 @@ public class MLExecutor {
     }
 
     /**
-     * ThreadFactory СЃ РєР°СЃС‚РѕРјРЅС‹РјРё РёРјРµРЅР°РјРё РґР»СЏ РїРѕС‚РѕРєРѕРІ
+     * ThreadFactory with custom thread names
      */
     private static class MLThreadFactory implements ThreadFactory {
         private final AtomicInteger threadNumber = new AtomicInteger(1);

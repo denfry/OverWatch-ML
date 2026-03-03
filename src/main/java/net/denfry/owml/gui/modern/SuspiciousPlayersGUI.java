@@ -2,6 +2,7 @@ package net.denfry.owml.gui.modern;
 
 import net.denfry.owml.OverWatchML;
 import net.denfry.owml.managers.ISuspiciousService;
+import net.denfry.owml.detection.PlayerBehaviorProfile;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
@@ -49,32 +50,51 @@ public class SuspiciousPlayersGUI implements OverWatchGUI {
     @Override
     public void refresh(Player player) {
         inventory.clear();
-        ISuspiciousService service = plugin.getContext().getSuspiciousService();
-        List<UUID> players = new ArrayList<>(service.getSuspiciousPlayers());
+        List<UUID> players = new ArrayList<>(Bukkit.getOnlinePlayers().stream().map(Player::getUniqueId).toList());
+        
+        // Filter and calculate scores
+        Map<UUID, Double> playerScores = new HashMap<>();
+        Map<UUID, String> mainReasons = new HashMap<>();
 
-        // Фильтрация
+        for (UUID uuid : players) {
+            PlayerBehaviorProfile profile = plugin.getContext().getProfileManager().getProfile(uuid);
+            
+            // Find highest score and category
+            double maxScore = 0.0;
+            String mainCat = "None";
+            
+            for (Map.Entry<String, Double> entry : profile.getDetectionScores().entrySet()) {
+                if (entry.getValue() > maxScore) {
+                    maxScore = entry.getValue();
+                    mainCat = entry.getKey().toUpperCase();
+                }
+            }
+            
+            playerScores.put(uuid, maxScore);
+            mainReasons.put(uuid, mainCat);
+        }
+
+        // Apply filters
         players = players.stream().filter(uuid -> {
             OfflinePlayer op = Bukkit.getOfflinePlayer(uuid);
-            // Поиск по имени
             if (!searchQuery.isEmpty() && (op.getName() == null || !op.getName().toLowerCase().contains(searchQuery.toLowerCase()))) return false;
-            // Статус
-            if (statusFilter == StatusFilter.ONLINE_ONLY && !op.isOnline()) return false;
-            // Тип (упрощенная логика для примера)
-            int score = service.getSuspicionLevel(uuid);
-            if (score < 10) return false; 
+            
+            double score = playerScores.getOrDefault(uuid, 0.0);
+            if (score < 0.1 && statusFilter != StatusFilter.ALL) return false; // Hide completely safe players if not in ALL mode
+            
             return true;
         }).collect(Collectors.toList());
 
-        // Сортировка
+        // Sort
         players.sort((p1, p2) -> {
             switch (sortType) {
-                case SCORE_ASC: return Integer.compare(service.getSuspicionLevel(p1), service.getSuspicionLevel(p2));
+                case SCORE_ASC: return Double.compare(playerScores.get(p1), playerScores.get(p2));
                 case NAME: return Bukkit.getOfflinePlayer(p1).getName().compareToIgnoreCase(Bukkit.getOfflinePlayer(p2).getName());
-                case SCORE_DESC: default: return Integer.compare(service.getSuspicionLevel(p2), service.getSuspicionLevel(p1));
+                case SCORE_DESC: default: return Double.compare(playerScores.get(p2), playerScores.get(p1));
             }
         });
 
-        // Пагинация
+        // Pagination
         int totalPages = (int) Math.ceil(players.size() / 45.0);
         if (currentPage >= totalPages && totalPages > 0) currentPage = totalPages - 1;
 
@@ -84,16 +104,16 @@ public class SuspiciousPlayersGUI implements OverWatchGUI {
         for (int i = 0; i < (end - start); i++) {
             UUID uuid = players.get(start + i);
             OfflinePlayer op = Bukkit.getOfflinePlayer(uuid);
-            int score = service.getSuspicionLevel(uuid);
-            String scoreColor = score > 80 ? "§c" : (score > 40 ? "§e" : "§a");
+            double score = playerScores.getOrDefault(uuid, 0.0);
+            String scoreColor = score > 0.8 ? "§c" : (score > 0.5 ? "§6" : "§a");
 
             inventory.setItem(i, ItemBuilder.material(Material.PLAYER_HEAD)
                     .skull(op.getName())
-                    .name(scoreColor + op.getName() + " §7(" + score + ")")
+                    .name(scoreColor + op.getName() + " §7(" + String.format("%.0f%%", score * 100) + ")")
                     .lore(List.of(
                             "§7Status: " + (op.isOnline() ? "§aOnline" : "§7Offline"),
-                            "§7Main Reason: §fAbnormal mining pattern",
-                            "§7Last Activity: §f" + (op.isOnline() ? "Just now" : "Long ago"),
+                            "§7Primary Issue: " + scoreColor + mainReasons.get(uuid),
+                            "§7Last Analysis: §fJust now",
                             "",
                             "§eLeft-Click: §7Full Profile",
                             "§eRight-Click: §7Quick Actions",
