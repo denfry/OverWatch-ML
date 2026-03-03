@@ -1,3 +1,9 @@
+# AI Agent and IDE Specific
+.gemini/
+GEMINI.md
+MARKETPLACE.md
+.vscode/
+
 # Maven
 target/
 pom.xml.tag
