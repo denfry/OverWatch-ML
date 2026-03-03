@@ -53,47 +53,47 @@ public interface AnalysisManager {
 ### Basic Usage
 
 ```java
-// Получение ML менеджера
+// Getting the ML manager
 ModernMLManager mlManager = (ModernMLManager) plugin.getMLManager();
 
-// Асинхронный анализ игрока
+// Asynchronous player analysis
 mlManager.analyzePlayerAsync(playerId, new AnalysisCallback() {
     @Override
     public void onAnalysisComplete(UUID playerId, DetectionResult result) {
         if (result == DetectionResult.CHEATER_HIGH_CONFIDENCE) {
-            // Применить наказание
+            // Apply punishment
             punishPlayer(playerId);
         }
     }
 
     @Override
     public void onAnalysisFailed(UUID playerId, Throwable error) {
-        logger.warning("ML анализ не удался для " + playerId + ": " + error.getMessage());
+        logger.warning("ML analysis failed for " + playerId + ": " + error.getMessage());
     }
 });
 
-// Синхронный анализ (осторожно!)
+// Synchronous analysis (use with caution!)
 DetectionResult result = mlManager.analyzePlayerSync(playerId);
 ```
 
 ### Model Training
 
 ```java
-// Начать сбор данных для обучения
-mlManager.startTraining(player, true); // true = читер
+// Start collecting training data
+mlManager.startTraining(player, true); // true = cheater
 
-// Через 60 секунд сбор автоматически остановится и модель переобучится
+// After 60 seconds, collection will automatically stop and the model will retrain
 ```
 
-## Конфигурация
+## Configuration
 
-### Основные настройки
+### Core Settings
 
 ```yaml
 ml:
   enabled: true
-  trainingSessionDuration: 60  # секунды
-  detectionThreshold: 0.75     # порог обнаружения
+  trainingSessionDuration: 60  # seconds
+  detectionThreshold: 0.75     # detection threshold
 
   autoAnalysis:
     enabled: true
@@ -101,7 +101,7 @@ ml:
     maxPlayers: 5
 
   performance:
-    executorPoolSize: 0        # 0 = автоопределение
+    executorPoolSize: 0        # 0 = auto-detection
     analysisTimeoutSeconds: 30
     maxConcurrentAnalyses: 10
 
@@ -123,21 +123,21 @@ ml:
     maxAnalysisQueueSize: 500
 ```
 
-### Программная настройка
+### Programmatic Configuration
 
 ```java
 MLConfig config = mlManager.getMLConfig();
 
-// Настройка производительности
+// Performance Configuration
 config.setExecutorPoolSize(8);
 config.setAnalysisTimeoutSeconds(45);
 config.setMaxConcurrentAnalyses(15);
 
-// Настройка кеширования
+// Cache Configuration
 config.setAnalysisCacheMaxSize(2000);
 config.setAnalysisCacheExpiryMinutes(3);
 
-// Сохранение изменений
+// Saving changes
 config.saveConfig();
 ```
 
@@ -147,26 +147,26 @@ config.saveConfig();
 
 ```java
 enum DetectionResult {
-    CHEATER_HIGH_CONFIDENCE,    // Высокая уверенность в читерстве
-    CHEATER_MEDIUM_CONFIDENCE,  // Средняя уверенность
-    CHEATER_LOW_CONFIDENCE,     // Низкая уверенность
-    SUSPICIOUS,                 // Подозрительное поведение
-    NORMAL                      // Нормальное поведение
+    CHEATER_HIGH_CONFIDENCE,    // High confidence in cheating
+    CHEATER_MEDIUM_CONFIDENCE,  // Medium confidence
+    CHEATER_LOW_CONFIDENCE,     // Low confidence
+    SUSPICIOUS,                 // Suspicious behavior
+    NORMAL                      // Normal behavior
 }
 ```
 
-### Метрики производительности
+### Performance Metrics
 
 ```java
-// Получение статистики
+// Getting statistics
 String performanceStats = mlManager.getPerformanceStats();
-// Вывод: "ML Performance: [детальная статистика]"
+// Output: "ML Performance: [detailed statistics]"
 
-// Получение метрик в коде
+// Getting metrics in code
 MLMetrics.MLStats stats = mlManager.getMetrics().getStats();
-System.out.println("Всего предсказаний: " + stats.totalPredictions);
-System.out.println("Среднее время: " + stats.avgPredictionTimeMs + "ms");
-System.out.println("Попаданий в кеш: " + stats.cacheHitRate * 100 + "%");
+System.out.println("Total predictions: " + stats.totalPredictions);
+System.out.println("Average time: " + stats.avgPredictionTimeMs + "ms");
+System.out.println("Cache hits: " + stats.cacheHitRate * 100 + "%");
 ```
 
 ### Cache API
@@ -174,30 +174,30 @@ System.out.println("Попаданий в кеш: " + stats.cacheHitRate * 100 +
 ```java
 MLCache cache = mlManager.getCache();
 
-// Ручное управление кешем
-cache.invalidatePlayer(playerId);  // Очистить данные игрока
-cache.clearAll();                  // Очистить весь кеш
+// Manual cache management
+cache.invalidatePlayer(playerId);  // Clear player data
+cache.clearAll();                  // Clear entire cache
 
-// Статистика кеша
+// Cache statistics
 MLCache.CacheStats cacheStats = cache.getStats();
 System.out.println(cacheStats.toString());
 ```
 
-## Расширенные возможности
+## Advanced Features
 
-### Кастомные модели
+### Custom Models
 
 ```java
 public class CustomMLModel implements MLModel {
     @Override
     public DetectionResult analyze(PlayerMiningData data) {
-        // Ваша логика анализа
+        // Your analysis logic
         return DetectionResult.NORMAL;
     }
 
     @Override
     public boolean train(Collection<PlayerMiningData> trainingData) {
-        // Ваша логика обучения
+        // Your training logic
         return true;
     }
 
@@ -207,21 +207,21 @@ public class CustomMLModel implements MLModel {
     }
 
     @Override
-    public void save() { /* сохранение */ }
+    public void save() { /* saving */ }
 
     @Override
-    public void load() { /* загрузка */ }
+    public void load() { /* loading */ }
 
     @Override
-    public void dispose() { /* очистка */ }
+    public void dispose() { /* disposal */ }
 }
 
-// Регистрация кастомной модели
+// Registering a custom model
 ModernMLManager mlManager = new ModernMLManager(plugin, configManager);
-// Заменить модель через reflection или создать новый конструктор
+// Replace model via reflection or create a new constructor
 ```
 
-### Кастомные сборщики данных
+### Custom Data Collectors
 
 ```java
 public class AdvancedDataCollector implements DataCollector {
@@ -238,143 +238,143 @@ public class AdvancedDataCollector implements DataCollector {
         return collectingData.remove(player.getUniqueId());
     }
 
-    // ... остальные методы
+    // ... other methods
 }
 ```
 
-## Мониторинг и отладка
+## Monitoring and Debugging
 
-### Логирование
+### Logging
 
-Система автоматически логирует важные события:
+The system automatically logs important events:
 
 ```
-[INFO] ML модель успешно обучена!
-[WARNING] ML анализ не удался для player123: Timeout
+[INFO] ML model successfully trained!
+[WARNING] ML analysis failed for player123: Timeout
 [INFO] ML Metrics: Predictions=150 (Success: 95.3%), Training=3, Avg Prediction=45.2ms
 ```
 
-### Отладочные команды
+### Debug Commands
 
 ```
-/owml ml status              # Статус системы
-/owml ml train <player> <type> # Обучить на игроке (cheater|normal)
-/owml ml autotrain [count]    # Автоматически обучить на нескольких игроках
-/owml ml spawn <type> <count> # Спавнить ботов для обучения
-/owml ml bots <status|remove|auto> # Управление ботами
-/owml ml analyze <player>     # Анализировать игрока
-/owml ml metrics              # Показать метрики
-/owml ml cache                # Статистика кеша
+/owml ml status              # System status
+/owml ml train <player> <type> # Train on player (cheater|normal)
+/owml ml autotrain [count]    # Automatically train on multiple players
+/owml ml spawn <type> <count> # Spawn bots for training
+/owml ml bots <status|remove|auto> # Bot management
+/owml ml analyze <player>     # Analyze player
+/owml ml metrics              # Show metrics
+/owml ml cache                # Cache statistics
 ```
 
-#### Автоматическое обучение (autotrain)
+#### Automatic Training (autotrain)
 
-Команда `/owml ml autotrain [count]` позволяет автоматически запустить обучение ML модели на нескольких онлайн игроках одновременно:
+The `/owml ml autotrain [count]` command allows you to automatically start ML model training on multiple online players simultaneously:
 
-- **Без параметров**: обучает на всех доступных игроках
-- **С числом**: обучает на указанном количестве игроков (макс. 10)
+- **Without parameters**: trains on all available players
+- **With a number**: trains on the specified number of players (max. 10)
 
-**Пример использования:**
+**Usage Example:**
 ```
-/owml ml autotrain        # Обучить на всех игроках
-/owml ml autotrain 5      # Обучить на 5 случайных игроках
+/owml ml autotrain        # Train on all players
+/owml ml autotrain 5      # Train on 5 random players
 ```
 
-**Как работает:**
-1. Автоматически выбирает онлайн игроков (кроме вас)
-2. Половина игроков маркируется как "нормальные", вторая половина как "читеры"
-3. Запускает сессии обучения на 60 секунд каждая
-4. Игроки должны вести себя соответственно своей роли
+**How it works:**
+1. Automatically selects online players (except you)
+2. Half of the players are marked as "normal", the other half as "cheaters"
+3. Starts training sessions for 60 seconds each
+4. Players must behave according to their role
 
-**Важно:**
-- Нормальные игроки должны добывать руду легитимно
-- "Читеры" должны симулировать X-ray поведение (прямые туннели к руде)
-- Все игроки должны активно добывать в течение сессии
+**Important:**
+- Normal players must mine ore legitimately
+- "Cheaters" must simulate X-ray behavior (straight tunnels to ore)
+- All players must actively mine during the session
 
-## 🤖 Система тренировочных ботов
+## 🤖 Training Bot System
 
-### Обзор
+### Overview
 
-OverWatch-ML включает инновационную систему тренировочных ботов, которая позволяет обучать ML модель без участия реальных игроков. Боты автоматически спавнятся, имитируют различные типы поведения при добыче и генерируют тренировочные данные.
+OverWatch-ML includes an innovative training bot system that allows training the ML model without real player involvement. Bots spawn automatically, simulate various mining behaviors, and generate training data.
 
-### Типы поведения ботов
+### Bot Behavior Types
 
-#### NORMAL_MINER (Обычный шахтер)
-- Добывает руду обычным способом
-- Исследует пещеры и создает ответвления
-- Избегает прямых туннелей к ценным рудам
-- Имитирует поведение легитимных игроков
+#### NORMAL_MINER
+- Mines ore in a normal way
+- Explores caves and creates branches
+- Avoids straight tunnels to valuable ores
+- Simulates legitimate player behavior
 
-#### XRAY_CHEATER (Читер с X-ray)
-- Создает прямые туннели к алмазным жилам
-- Игнорирует железо/уголь, фокусируется на алмазах
-- Делает длинные прямые коридоры
-- Имитирует классическое X-ray поведение
+#### XRAY_CHEATER
+- Creates straight tunnels to diamond veins
+- Ignores iron/coal, focuses on diamonds
+- Makes long straight corridors
+- Simulates classic X-ray behavior
 
-#### TUNNEL_MINER (Туннельщик)
-- Создает длинные прямые туннели
-- Добывает все руды на пути
-- Не ищет конкретные ценные материалы
+#### TUNNEL_MINER
+- Creates long straight tunnels
+- Mines all ores in its path
+- Does not seek specific valuable materials
 
-#### RANDOM_MINER (Случайный шахтер)
-- Добывает блоки совершенно случайно
-- Не имеет никакой логики или паттернов
-- Имитирует неумелых игроков
+#### RANDOM_MINER
+- Mines blocks completely randomly
+- Has no logic or patterns
+- Simulates unskilled players
 
-#### EFFICIENT_MINER (Эффективный шахтер)
-- Использует технику branch mining
-- Находит оптимальные пути к рудам
-- Добывает эффективно, но легитимно
+#### EFFICIENT_MINER
+- Uses branch mining technique
+- Finds optimal paths to ores
+- Mines efficiently but legitimately
 
-#### SURFACE_MINER (Поверхностный шахтер)
-- Добывает близко к поверхности
-- Избегает глубоких шахт
-- Имитирует новичков
+#### SURFACE_MINER
+- Mines close to the surface
+- Avoids deep mines
+- Simulates beginners
 
-### Команды управления ботами
+### Bot Management Commands
 
-#### Спавн ботов
+#### Bot Spawning
 ```bash
-/owml ml spawn NORMAL_MINER 5    # Спавнить 5 обычных шахтеров
-/owml ml spawn XRAY_CHEATER 3    # Спавнить 3 читера с X-ray
-/owml ml spawn TUNNEL_MINER 2    # Спавнить 2 туннельщика
+/owml ml spawn NORMAL_MINER 5    # Spawn 5 normal miners
+/owml ml spawn XRAY_CHEATER 3    # Spawn 3 x-ray cheaters
+/owml ml spawn TUNNEL_MINER 2    # Spawn 2 tunnelers
 ```
 
-#### Управление ботами
+#### Bot Management
 ```bash
-/owml ml bots status     # Показать статус всех ботов
-/owml ml bots remove     # Удалить всех активных ботов
-/owml ml bots auto on    # Включить автоматический спавн
-/owml ml bots auto off   # Выключить автоматический спавн
+/owml ml bots status     # Show status of all bots
+/owml ml bots remove     # Remove all active bots
+/owml ml bots auto on    # Enable automatic spawn
+/owml ml bots auto off   # Disable automatic spawn
 ```
 
-### Как работает система ботов
+### How the Bot System Works
 
-1. **Спавн**: Боты появляются в безопасных местах добычи
-2. **Поведение**: Каждый бот выполняет специфическое поведение в течение 2 минут
-3. **Сбор данных**: Все действия ботов записываются (сломанные блоки, перемещения)
-4. **Генерация признаков**: На основе действий рассчитываются ML признаки
-5. **Обучение**: Данные автоматически подаются в ML систему для обучения
+1. **Spawn**: Bots appear in safe mining locations
+2. **Behavior**: Each bot performs specific behavior for 2 minutes
+3. **Data Collection**: All bot actions are recorded (broken blocks, movements)
+4. **Feature Generation**: ML features are calculated based on actions
+5. **Training**: Data is automatically fed into the ML system for training
 
-### Автоматический режим
+### Automatic Mode
 
-Когда включен авто-режим (`/owml ml bots auto on`), система:
-- Автоматически спавнит ботов разных типов каждые ~30 секунд
-- Поддерживает максимум 5 одновременных ботов
-- Гарантирует разнообразие типов поведения
-- Автоматически удаляет ботов после завершения сессии
+When auto-mode (`/owml ml bots auto on`) is enabled, the system:
+- Automatically spawns different types of bots every ~30 seconds
+- Maintains a maximum of 5 concurrent bots
+- Guarantees a variety of behavior types
+- Automatically removes bots after the session ends
 
-### Преимущества ботов
+### Bot Advantages
 
-✅ **Не нужны игроки** - обучение работает круглосуточно
-✅ **Контролируемое обучение** - точные паттерны поведения
-✅ **Безопасность** - не влияет на реальных игроков
-✅ **Масштабируемость** - можно генерировать тысячи примеров
-✅ **Разнообразие** - разные типы поведения для лучшего обучения
+✅ **No players needed** - training works 24/7
+✅ **Controlled training** - precise behavior patterns
+✅ **Safety** - does not affect real players
+✅ **Scalability** - can generate thousands of examples
+✅ **Diversity** - different behavior types for better training
 
-### Мониторинг
+### Monitoring
 
-Система предоставляет детальную статистику:
+The system provides detailed statistics:
 
 ```
 Training Bots Status
@@ -391,92 +391,92 @@ Training Bots Status
     • xray cheater: 2
 ```
 
-### Технические детали
+### Technical Details
 
-- **Длительность сессии**: 120 секунд (настраивается)
-- **Максимум ботов**: 20 одновременных (настраивается)
-- **Частота спавна**: Каждые 30 секунд в авто-режиме
-- **Радиус поиска**: Боты ищут руду в радиусе 50 блоков
-- **Безопасность**: Боты спавнятся только в безопасных местах
+- **Session duration**: 120 seconds (configurable)
+- **Max bots**: 20 concurrent (configurable)
+- **Spawn frequency**: Every 30 seconds in auto-mode
+- **Search radius**: Bots search for ore within a 50-block radius
+- **Safety**: Bots spawn only in safe locations
 
 ## Best Practices
 
-### 1. Производительность
-- ✅ Используйте асинхронные методы для тяжелых операций
-- ✅ Настраивайте размеры кешей под вашу нагрузку
-- ✅ Мониторьте метрики и настраивайте таймауты
+### 1. Performance
+- ✅ Use asynchronous methods for heavy operations
+- ✅ Configure cache sizes for your workload
+- ✅ Monitor metrics and configure timeouts
 
-### 2. Надежность
-- ✅ Всегда обрабатывайте исключения
-- ✅ Используйте fallback логику при ошибках ML
-- ✅ Внедряйте graceful degradation
+### 2. Reliability
+- ✅ Always handle exceptions
+- ✅ Use fallback logic on ML errors
+- ✅ Implement graceful degradation
 
-### 3. Масштабируемость
-- ✅ Разделяйте обучение и анализ
-- ✅ Используйте ограничения на очереди
-- ✅ Оптимизируйте сбор данных
+### 3. Scalability
+- ✅ Separate training and analysis
+- ✅ Use queue limits
+- ✅ Optimize data collection
 
-### 4. Тестирование
-- ✅ Создавайте unit тесты для компонентов
-- ✅ Используйте mock объекты для тестирования
-- ✅ Тестируйте error scenarios
+### 4. Testing
+- ✅ Create unit tests for components
+- ✅ Use mock objects for testing
+- ✅ Test error scenarios
 
 ## Troubleshooting
 
-### Высокая загрузка CPU
+### High CPU Load
 ```yaml
 ml:
   performance:
-    executorPoolSize: 2  # Уменьшить количество потоков
+    executorPoolSize: 2  # Reduce thread count
   cache:
     analysis:
-      maxSize: 500  # Уменьшить размер кеша
+      maxSize: 500  # Reduce cache size
 ```
 
-### Память утекает
+### Memory Leak
 ```yaml
 ml:
   maintenance:
-    cleanupIntervalMinutes: 2  # Учащать очистку
+    cleanupIntervalMinutes: 2  # Frequent cleanup
   cache:
     playerData:
-      expiryMinutes: 15  # Уменьшить время жизни
+      expiryMinutes: 15  # Reduce lifetime
 ```
 
-### Медленный анализ
+### Slow Analysis
 ```yaml
 ml:
   performance:
-    maxConcurrentAnalyses: 5  # Ограничить параллельность
+    maxConcurrentAnalyses: 5  # Limit parallelism
   cache:
     features:
-      maxSize: 1000  # Увеличить кеш признаков
+      maxSize: 1000  # Increase feature cache
 ```
 
-## Миграция с Legacy API
+## Migration from Legacy API
 
-Если вы используете старый MLManager:
+If you are using the old MLManager:
 
 ```java
-// Старый код
+// Old code
 MLManager oldManager = plugin.getMLManager();
 oldManager.startAnalysis(player);
 
-// Новый код
+// New code
 ModernMLManager newManager = (ModernMLManager) plugin.getMLManager();
 newManager.analyzePlayerAsync(player.getUniqueId(), callback);
 ```
 
-## Поддержка и развитие
+## Support and Development
 
-- 📧 Issues: Создавайте issues на GitHub
-- 📖 Wiki: Подробная документация в wiki
-- 🏗️ Architecture: SOLID принципы, Clean Architecture
+- 📧 Issues: Create issues on GitHub
+- 📖 Wiki: Detailed documentation in wiki
+- 🏗️ Architecture: SOLID principles, Clean Architecture
 - 🧪 Testing: 95%+ code coverage
-- 🚀 Performance: Оптимизировано для production
+- 🚀 Performance: Optimized for production
 
 ---
 
-**Версия API:** 2.0.0
-**Совместимость:** Minecraft 1.21+
+**API Version:** 2.0.0
+**Compatibility:** Minecraft 1.21+
 **Java:** 21+
