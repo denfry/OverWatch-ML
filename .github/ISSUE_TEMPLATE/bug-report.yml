@@ -1,0 +1,116 @@
+name: Bug Report
+description: Report a bug or issue with DeepGuard-Xray
+title: "[BUG] "
+labels: ["bug"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Bug Report
+
+        Thank you for reporting a bug! Please provide as much detail as possible to help us reproduce and fix the issue.
+
+  - type: input
+    id: version
+    attributes:
+      label: Plugin Version
+      description: Which version of DeepGuard-Xray are you using?
+      placeholder: "e.g., 1.8.0"
+    validations:
+      required: true
+
+  - type: input
+    id: server-version
+    attributes:
+      label: Server Version
+      description: What Minecraft server version are you running?
+      placeholder: "e.g., Paper 1.21.4 or Spigot 1.16.5"
+    validations:
+      required: true
+
+  - type: input
+    id: java-version
+    attributes:
+      label: Java Version
+      description: Which Java version is your server using?
+      placeholder: "e.g., Java 21"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ml-enabled
+    attributes:
+      label: Machine Learning Detection
+      description: Is ML detection enabled in your configuration?
+      options:
+        - "Yes"
+        - "No"
+        - "Not sure"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of the bug.
+      placeholder: "Describe what happened, what you expected to happen, and how to reproduce it."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction-steps
+    attributes:
+      label: Steps to Reproduce
+      description: Provide detailed steps to reproduce the bug.
+      placeholder: |
+        1. Go to '...'
+        2. Click on '....'
+        3. Scroll down to '....'
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: What should have happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual Behavior
+      description: What actually happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Server Logs
+      description: Please provide relevant server logs. Use a paste service like pastebin.com or gist.github.com for long logs.
+      placeholder: "Upload or link to your server logs here. Include any error messages related to DeepGuard-Xray."
+    validations:
+      required: false
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration
+      description: If applicable, provide your plugin configuration (remove sensitive information).
+      placeholder: "Paste your config.yml here or describe any relevant configuration changes."
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-info
+    attributes:
+      label: Additional Information
+      description: Any additional information that might be helpful.
+      placeholder: "Add any other context about the problem here."
+    validations:
+      required: false

@@ -1,0 +1,99 @@
+name: OverWatch-ML
+version: '2.1.0'
+main: net.denfry.owml.OverWatchML
+api-version: '1.21'
+depend: [ProtocolLib]
+softdepend: [Paper, Folia]
+folia-supported: true
+description: Advanced OverWatch-ML with ML detection, behavioral profiling, and adaptive systems. Supports Minecraft 1.21+.
+permissions:
+  # This is the CRITICAL permission needed for command hiding feature
+  # When command hiding is enabled, players MUST have this permission
+  # to use any OverWatch-ML commands, otherwise they'll see "Unknown command" errors
+  owml.use:
+    description: "Allows the user to see and use OverWatch commands. IF Only command-hiding is true"
+    default: op
+  owml.staff:
+    description: "Allows the user to receive anti-xray alerts."
+    default: op
+  owml.teleport:
+    description: "Allows the user to teleport to decoy ore locations by clicking alerts."
+    default: op
+  owml.togglealert:
+    description: "Allows the user to toggle the ore alert."
+    default: op
+  owml.debug:
+    description: "Allows the user to Enable/Disable the debug alert."
+    default: op
+  owml.gui:
+    description: Allows access to the AntiXray staff GUI.
+    default: op
+  owml.highlight:
+    description: Allows highlighting of decoy ore veins
+    default: op
+  owml.punish:
+    description: Allows direct management of punishment levels
+    default: op
+  owml.modify:
+    description: Allows access to the AntiXray Modify  suspicious count.
+    default: op
+  owml.ml:
+    description: Access to ML commands and analysis
+    default: op
+  owml.autoupdate:
+    description: Allows access to Use the update commands.
+    default: op
+  owml.gui_playerstats:
+    description: Allows access to the detailed player mining stats GUI.
+    default: op
+  owml.gui_suspicious:
+    description: Allows access to the detailed suspicious player mining stats GUI.
+    default: op
+  owml.gui_punishment:
+    description: Allows access to punishment configuration GUI
+    default: op
+  owml.gui_oreconfig:
+    description: Allows access to oreconfig GUI
+    default: op
+  owml.gui_ml:
+    description: Access to ML analysis GUI
+    default: op
+  owml.gui_config:
+    description: Allows access to the plugin configuration GUI
+    default: op
+  owml.gui_webhook:
+    description: Allows configuring Discord webhook settings
+    default: op
+  owml.gui_Appeal:
+    description: Allows access to Appeal GUI
+    default: op
+  owml.admin:
+    description: Allows access to administrative functions like web panel
+    default: op
+  owml.behavioral:
+    description: Access to behavioral profiling and analysis features
+    default: op
+  owml.adaptive:
+    description: Access to adaptive punishment system
+    default: op
+  owml.interactive:
+    description: Access to interactive command features and help
+    default: op
+  owml.advanced_ml:
+    description: Access to advanced ML features and ensemble detection
+    default: op
+  owml.data_admin:
+    description: Access to data management and optimization features
+    default: op
+  owml.fraud_detection:
+    description: Access to fraud detection and bot analysis features
+    default: op
+  owml.context_aware:
+    description: Access to context-aware detection features
+    default: op
+
+commands:
+  overwatch:
+    description: Advanced AntiXray command with ML-powered subcommands and interactive help.
+    usage: /overwatch <subcommand> [args]
+    aliases: [owml]

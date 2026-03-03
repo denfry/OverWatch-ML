@@ -1,0 +1,31 @@
+name: Feature Request
+description: Suggest an idea for OverWatch-ML
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: feature-area
+    attributes:
+      label: Feature Area
+      description: Which area of the plugin does this feature relate to?
+      options:
+        - ML Detection
+        - GUI
+        - Commands
+        - Performance
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Description
+      description: What problem are you trying to solve? Please provide a clear use case.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution you'd like.
+    validations:
+      required: true

@@ -1,0 +1,106 @@
+name: Feature Request
+description: Suggest a new feature or enhancement for DeepGuard-Xray
+title: "[FEATURE] "
+labels: ["enhancement"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Feature Request
+
+        Thank you for suggesting a new feature! We appreciate your ideas to help improve DeepGuard-Xray.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Feature Summary
+      description: Provide a brief summary of the feature you'd like to see.
+      placeholder: "A short description of what you want to add or change."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Feature Type
+      description: What type of feature is this?
+      options:
+        - "New Detection Method"
+        - "User Interface Enhancement"
+        - "Configuration Option"
+        - "Performance Improvement"
+        - "Integration (Discord, Database, etc.)"
+        - "Commands and Permissions"
+        - "Punishment System"
+        - "Machine Learning Enhancement"
+        - "Other"
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem/Use Case
+      description: What problem does this feature solve? Or what use case does it enable?
+      placeholder: "Describe the problem this feature would solve or the use case it would enable."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: How would you like this feature to work?
+      placeholder: "Describe your proposed solution in detail."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternative Solutions
+      description: Have you considered any alternative approaches?
+      placeholder: "Describe any alternative solutions you've considered."
+    validations:
+      required: false
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Examples
+      description: Provide examples of how this feature would work.
+      placeholder: "Include mockups, command examples, configuration examples, or other illustrations."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this feature to you?
+      options:
+        - "Nice to have"
+        - "Would be helpful"
+        - "Important"
+        - "Critical"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: willing-to-help
+    attributes:
+      label: Willing to Help
+      description: Are you willing to help implement this feature?
+      options:
+        - label: "I would like to help implement this feature"
+        - label: "I can provide more details or testing"
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any additional information or context.
+      placeholder: "Add any other context, screenshots, or references here."
+    validations:
+      required: false
