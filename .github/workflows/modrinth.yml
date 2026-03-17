@@ -24,19 +24,12 @@ jobs:
         run: mvn clean package -DskipTests
 
       - name: Upload to Modrinth
-        uses: modrinth-action/upload@v1
+        uses: cloudnode-pro/modrinth-publish@v2
         with:
           token: ${{ secrets.MODRINTH_API_TOKEN }}
-          file-path: target/OverWatch-ML-*.jar
-          game-versions: |
-            1.21
-            1.21.1
-            1.21.2
-            1.21.3
-            1.21.4
-          loaders: |
-            paper
+          project: TT5IPxXT
+          version: 2.2.0
+          loaders: paper
+          game-versions: 1.21.4
           version-type: release
-          featured: false
-          dependencies: |
-            [{"project_id":"ProtocolLib","version_type":"required"}]
+          files: target/OverWatch-ML-*.jar
