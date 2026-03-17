@@ -31,5 +31,5 @@ jobs:
           version: 2.2.0
           loaders: paper
           game-versions: 1.21.4
-          version-type: release
-          files: target/OverWatch-ML-*.jar
+          channel: release
+          files: target/OverWatch-ML-2.2.0.jar
