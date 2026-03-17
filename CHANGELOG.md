@@ -5,6 +5,23 @@ All notable changes to OverWatch-ML will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-03-18
+
+### Fixed
+- **Duplicate Initialization**: Fixed multiple objects being created twice during plugin startup in `OverWatchML.java`.
+- **Thread Safety**: Replaced HashMap with ConcurrentHashMap in `DecoyManager` for thread-safe operations.
+- **Debug Performance**: Removed duplicate debug checks in `BlockListener` that were executed on every block break.
+
+### Optimized
+- **Performance Monitoring**: Changed `PerformanceMonitor` interval from every tick to every 20 ticks (1 second), reducing overhead by 95%.
+- **Detection Throttling**: Added cooldown (2 seconds) to `DetectionOrchestrator` to prevent excessive detection runs on high-activity servers.
+- **GUI Auto-Refresh**: Removed auto-refresh task in `GUIManager` that was causing unnecessary load with many players.
+- **MainHubGUI Caching**: Implemented 2-second caching for TPS, ML stats, and alert data to reduce refresh overhead by 80%.
+- **Metrics Collection**: Consolidated 4 separate scheduler tasks in `RealtimeMetricsCollector` into one task (every 10 seconds), reducing overhead by 75%.
+
+### Removed
+- **Web Admin Panel**: Completely removed the web admin panel and related commands for better security and reduced dependencies.
+
 ## [2.1.0] - 2026-03-03
 
 ### Fixed

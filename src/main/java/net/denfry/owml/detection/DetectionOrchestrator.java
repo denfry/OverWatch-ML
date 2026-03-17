@@ -1,9 +1,12 @@
 package net.denfry.owml.detection;
 
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import org.bukkit.entity.Player;
 import net.denfry.owml.ml.impl.XrayDetection;
 import net.denfry.owml.ml.impl.CombatDetection;
@@ -26,6 +29,10 @@ public class DetectionOrchestrator {
     private final CorrelationEngine correlationEngine;
     private final BehaviorProfileManager profileManager;
     private final ScheduledExecutorService executorService;
+    
+    // Throttling: only run detection once per X seconds per player per category
+    private static final long DETECTION_COOLDOWN_MS = 2000; // 2 seconds between detections per player
+    private final Map<UUID, Map<String, Long>> lastDetectionTime = new ConcurrentHashMap<>();
 
     public DetectionOrchestrator(OverWatchML plugin, BehaviorProfileManager profileManager, List<AntiCheatIntegration> integrations) {
         this.plugin = plugin;
@@ -42,14 +49,27 @@ public class DetectionOrchestrator {
 
     /**
      * Performs a comprehensive check on a player, combining internal and external scores.
+     * Uses throttling to prevent excessive detections.
      * 
      * @param player The player to analyze.
      * @param category The cheat category.
      */
     public void runDetection(Player player, CheatCategory category) {
+        UUID playerId = player.getUniqueId();
+        String categoryKey = category.getKey();
+        long now = System.currentTimeMillis();
+        
+        // Throttling: check if we should skip this detection
+        Map<String, Long> playerDetections = lastDetectionTime.computeIfAbsent(playerId, k -> new ConcurrentHashMap<>());
+        Long lastTime = playerDetections.get(categoryKey);
+        if (lastTime != null && (now - lastTime) < DETECTION_COOLDOWN_MS) {
+            return; // Skip - too soon since last detection
+        }
+        playerDetections.put(categoryKey, now);
+        
         executorService.submit(() -> {
-            PlayerBehaviorProfile profile = profileManager.getProfile(player.getUniqueId());
-            PlayerEventBuffer buffer = profileManager.getEventBuffer(player.getUniqueId());
+            PlayerBehaviorProfile profile = profileManager.getProfile(playerId);
+            PlayerEventBuffer buffer = profileManager.getEventBuffer(playerId);
             
             // Simple Feature Extraction from Event Buffer
             updateMetrics(profile, buffer, category);
@@ -65,23 +85,35 @@ public class DetectionOrchestrator {
             }
 
             // Combine with external scores using CorrelationEngine
-            double finalScore = correlationEngine.calculateCombinedScore(player, internalScore, category.getKey());
+            double finalScore = correlationEngine.calculateCombinedScore(player, internalScore, categoryKey);
             
             // Update the player's behavior profile
-            profile.setDetectionScore(category.getKey(), finalScore);
+            profile.setDetectionScore(categoryKey, finalScore);
             profile.updateAnalysisTime();
 
             // Trigger alerts or punishments if necessary
             if (finalScore > 0.85) {
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
                     String message = String.format("§c%s failed §f%s §cdetection (Score: §e%.2f§c)", 
-                        player.getName(), category.getKey().toUpperCase(), finalScore);
+                        player.getName(), categoryKey.toUpperCase(), finalScore);
                     
                     if (plugin.getStaffAlertManager() != null) {
                         plugin.getStaffAlertManager().alertStaffWithTeleport(player, player.getLocation(), message);
                     }
                 });
             }
+        });
+    }
+
+    /**
+     * Clean up old entries from throttling map
+     */
+    public void cleanupThrottling() {
+        long cutoff = System.currentTimeMillis() - 60000; // Remove entries older than 1 minute
+        lastDetectionTime.entrySet().removeIf(entry -> {
+            Map<String, Long> playerMap = entry.getValue();
+            playerMap.entrySet().removeIf(innerEntry -> innerEntry.getValue() < cutoff);
+            return playerMap.isEmpty();
         });
     }
 

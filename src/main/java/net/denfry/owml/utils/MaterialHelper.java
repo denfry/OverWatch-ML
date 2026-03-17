@@ -1,7 +1,8 @@
 package net.denfry.owml.utils;
 
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import org.bukkit.Material;
 
 /**
@@ -9,7 +10,7 @@ import org.bukkit.Material;
  */
 public class MaterialHelper {
 
-    private static final Map<String, Material> materialCache = new HashMap<>();
+    private static final ConcurrentMap<String, Material> materialCache = new ConcurrentHashMap<>();
 
     /**
      * Initialize material helper

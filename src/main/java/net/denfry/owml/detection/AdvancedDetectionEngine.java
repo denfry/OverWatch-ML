@@ -372,6 +372,13 @@ public class AdvancedDetectionEngine implements Listener {
             return data.getLastActivity() < cutoffTime && !data.isActive();
         });
 
+        // Also cleanup lastMoveAnalysis for inactive players
+        lastMoveAnalysis.entrySet().removeIf(entry -> {
+            UUID playerId = entry.getKey();
+            PlayerDetectionData data = playerData.get(playerId);
+            return data == null || (data.getLastActivity() < cutoffTime && !data.isActive());
+        });
+
         MessageManager.log("info", "Cleaned up inactive player detection data");
     }
 

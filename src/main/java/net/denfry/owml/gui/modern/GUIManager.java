@@ -11,23 +11,16 @@ import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.inventory.Inventory;
 
 /**
- * GUI Manager responsible for handling events and auto-refresh.
+ * GUI Manager responsible for handling events.
+ * Auto-refresh removed for performance - players can manually refresh or reopen GUI.
  */
 public class GUIManager implements Listener {
     private final OverWatchML plugin;
 
     public GUIManager(OverWatchML plugin) {
         this.plugin = plugin;
-
-        // Auto-refresh task every 5 seconds
-        Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-            for (Player player : Bukkit.getOnlinePlayers()) {
-                Inventory topInv = player.getOpenInventory().getTopInventory();
-                if (topInv.getHolder() instanceof OverWatchGUI gui) {
-                    gui.refresh(player);
-                }
-            }
-        }, 100L, 100L);
+        // Auto-refresh removed - causes performance issues with many players
+        // Players can manually refresh by closing and reopening GUI
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)

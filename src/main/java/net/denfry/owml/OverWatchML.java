@@ -46,7 +46,6 @@ import net.denfry.owml.utils.TextUtils;
 import net.denfry.owml.utils.UpdateApplier;
 import net.denfry.owml.utils.UpdateChecker;
 import net.denfry.owml.utils.VersionHelper;
-import net.denfry.owml.web.AdminPanel;
 
 public class OverWatchML extends JavaPlugin {
     private static OverWatchML instance;
@@ -70,7 +69,6 @@ public class OverWatchML extends JavaPlugin {
     private DataEncryption dataEncryption;
     private StorageManager storageManager;
     private PluginManager pluginManager;
-    private AdminPanel adminPanel;
     private OverWatchContext context;
     private long startupTime;
 
@@ -100,16 +98,13 @@ public class OverWatchML extends JavaPlugin {
             initializeStorage();
             MessageManager.logStartup("Phase 3 (Storage) completed in {TIME}ms", "TIME", System.currentTimeMillis() - phaseStart);
 
-            // Phase 4: Core managers
+            // Phase 4: Core managers & security
             phaseStart = System.currentTimeMillis();
             initializeManagers();
-            initializeSecurity();
             MessageManager.logStartup("Phase 4 (Managers) completed in {TIME}ms", "TIME", System.currentTimeMillis() - phaseStart);
 
             // Phase 5: Advanced systems & Integrations
             phaseStart = System.currentTimeMillis();
-            initializeAdvancedSystems();
-            initializeIntegrations();
             MessageManager.logStartup("Phase 5 (Systems) completed in {TIME}ms", "TIME", System.currentTimeMillis() - phaseStart);
 
             // Phase 6: Event listeners & ML
@@ -227,87 +222,6 @@ public class OverWatchML extends JavaPlugin {
 
         // Initialize plugin manager
         pluginManager = new PluginManager();
-    }
-
-    /**
-     * Phase 7: Security and encryption initialization.
-     */
-    private void initializeSecurity() {
-        dataEncryption = new DataEncryption();
-
-        MessageManager.logInit("Security Systems", "Initialized successfully");
-    }
-
-    /**
-     * Phase 8: Advanced systems initialization.
-     */
-    private void initializeAdvancedSystems() {
-        // Initialize temporal punishment system
-        temporalPunishmentSystem = new TemporalPunishmentSystem();
-
-        // Initialize composite punishment engine
-        compositePunishmentEngine = new CompositePunishmentEngine();
-
-        // Initialize metrics collector
-        metricsCollector = new RealtimeMetricsCollector();
-
-        // Initialize report generator
-        reportGenerator = new ActivityReportGenerator();
-
-        // Initialize plugin manager
-        pluginManager = new PluginManager();
-
-        MessageManager.logInit("Advanced Systems", "Initialized successfully");
-    }
-
-    /**
-     * Phase 9: Integrations initialization.
-     */
-    private void initializeIntegrations() {
-        integrationManager = new IntegrationManager();
-
-        // Initialize admin panel if enabled
-        initializeAdminPanel();
-
-        MessageManager.logInit("Integration Systems", "Initialized successfully");
-    }
-
-    /**
-     * Initialize the web admin panel if enabled in config
-     */
-    private void initializeAdminPanel() {
-        boolean adminPanelEnabled = getConfig().getBoolean("admin-panel.enabled", false);
-
-        if (!adminPanelEnabled) {
-            MessageManager.logInit("Admin Panel", "Disabled in configuration");
-            return;
-        }
-
-        try {
-            int panelPort = getConfig().getInt("admin-panel.port", 8080);
-
-            MessageManager.logInit("Admin Panel", "Starting on port {PORT}...", "PORT", String.valueOf(panelPort));
-            MessageManager.log("warning", "==================================================");
-            MessageManager.log("warning", "IMPORTANT: Admin panel may not work on most Minecraft hosting providers!");
-            MessageManager.log("warning", "Most hosts do not allow opening additional ports beyond the Minecraft server port.");
-            MessageManager.log("warning", "If you're on shared hosting, the admin panel will likely fail to start.");
-            MessageManager.log("warning", "Admin panel works best on VPS/Dedicated servers where you control the firewall.");
-            MessageManager.log("warning", "==================================================");
-
-            AdminPanel.start(panelPort);
-
-            if (AdminPanel.isEnabled()) {
-                MessageManager.logInit("Admin Panel", "Successfully started on port {PORT}", "PORT", String.valueOf(panelPort));
-                MessageManager.log("info", "Access admin panel at: http://your-server-ip:{PORT}", "PORT", String.valueOf(panelPort));
-            } else {
-                MessageManager.log("warning", "Admin panel failed to start - likely port binding issue or hosting restrictions");
-            }
-
-        } catch (Exception e) {
-            MessageManager.log("error", "Failed to initialize admin panel: {ERROR}", "ERROR", e.getMessage());
-            MessageManager.log("warning", "This is expected on most Minecraft hosting providers that restrict port access");
-            e.printStackTrace();
-        }
     }
 
     /**
@@ -574,12 +488,6 @@ public class OverWatchML extends JavaPlugin {
                 MessageManager.logStartup("Paranoia handler cleaned up successfully");
             }
 
-            // Shutdown admin panel
-            if (AdminPanel.isEnabled()) {
-                AdminPanel.stop();
-                MessageManager.logStartup("Admin panel shut down successfully");
-            }
-
             // Shutdown storage system
             if (storageManager != null) {
                 storageManager.shutdown();
@@ -755,15 +663,6 @@ public class OverWatchML extends JavaPlugin {
      */
     public PluginManager getPluginManager() {
         return pluginManager;
-    }
-
-    /**
-     * Get the admin panel.
-     *
-     * @return the admin panel
-     */
-    public AdminPanel getAdminPanel() {
-        return adminPanel;
     }
 
     /**

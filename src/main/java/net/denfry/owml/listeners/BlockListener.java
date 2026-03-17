@@ -15,11 +15,16 @@ import net.denfry.owml.alerts.StaffAlertManager;
 import net.denfry.owml.config.ConfigManager;
 import net.denfry.owml.OverWatchML;
 import net.denfry.owml.OverWatchContext;
+import net.denfry.owml.detection.DetectionOrchestrator;
 import net.denfry.owml.managers.DecoyManager;
+import net.denfry.owml.managers.IDecoyService;
+import net.denfry.owml.managers.ISuspiciousService;
+import net.denfry.owml.managers.IStatsService;
 import net.denfry.owml.managers.PunishmentManager;
 import net.denfry.owml.punishments.PunishmentHandlerManager;
 import net.denfry.owml.punishments.handlers.Paranoia.ParanoiaHandler;
 
+import java.util.Set;
 import java.util.UUID;
 
 import static net.denfry.owml.utils.LocationUtils.formatLocation;
@@ -33,6 +38,11 @@ public class BlockListener implements Listener {
     private final PunishmentHandlerManager punishmentHandlerManager;
     private final ParanoiaHandler paranoiaHandler;
     private final OverWatchContext context;
+    private final Set<Material> naturalOres;
+    private final IDecoyService decoyService;
+    private final ISuspiciousService suspiciousService;
+    private final IStatsService statsService;
+    private final DetectionOrchestrator detectionOrchestrator;
 
     public BlockListener(OverWatchML plugin, ConfigManager configManager, StaffAlertManager staffAlertManager, DecoyManager decoyManager, PunishmentManager punishmentManager, ParanoiaHandler paranoiaHandler, OverWatchContext context) {
         this.plugin = plugin;
@@ -42,6 +52,11 @@ public class BlockListener implements Listener {
         this.paranoiaHandler = paranoiaHandler;
         this.context = context;
         this.punishmentHandlerManager = new PunishmentHandlerManager(plugin, configManager, punishmentManager, paranoiaHandler);
+        this.naturalOres = configManager.getNaturalOres();
+        this.decoyService = context.getDecoyService();
+        this.suspiciousService = context.getSuspiciousService();
+        this.statsService = context.getStatsService();
+        this.detectionOrchestrator = context.getDetectionOrchestrator();
     }
 
 
@@ -51,9 +66,9 @@ public class BlockListener implements Listener {
 
         Block block = event.getBlock();
         Material mat = block.getType();
-        if (configManager.getNaturalOres().contains(mat)) {
+        if (naturalOres.contains(mat)) {
             Location loc = block.getLocation();
-            context.getDecoyService().addPlayerPlacedOre(loc);
+            decoyService.addPlayerPlacedOre(loc);
 
             if (configManager.isCachedDebugEnabled()) {
                 Player player = event.getPlayer();
@@ -80,16 +95,11 @@ public class BlockListener implements Listener {
         // Record performance metrics
         net.denfry.owml.utils.PerformanceMonitor.recordBlockBreakCheck();
 
-        if (configManager.isCachedDebugEnabled() && configManager.getNaturalOres().contains(ore)) {
+        if (configManager.isCachedDebugEnabled() && naturalOres.contains(ore)) {
             plugin.getLogger().info("[EARLY CHECK] BlockListener processing block break for " + player.getName() + " at " + formatLocation(loc));
         }
 
-        if (configManager.isCachedDebugEnabled() && configManager.getNaturalOres().contains(ore)) {
-            boolean isCurrentlyPlayerPlaced = context.getDecoyService().isPlayerPlacedOre(loc);
-            plugin.getLogger().info("isPlayerPlacedOre returns: " + isCurrentlyPlayerPlaced + " for location " + formatLocation(loc));
-        }
-
-        if (context.getDecoyService().isPlayerPlacedOre(loc)) {
+        if (decoyService.isPlayerPlacedOre(loc)) {
             if (configManager.isCachedDebugEnabled()) {
                 plugin.getLogger().info("Player-placed ore detected for " + player.getName() + " at " + formatLocation(loc) + ", skipping processing");
             }
@@ -108,9 +118,9 @@ public class BlockListener implements Listener {
             paranoiaHandler.processBlockBreak(player, block);
         }
 
-        context.getStatsService().addOreMined(player.getUniqueId(), ore);
+        statsService.addOreMined(player.getUniqueId(), ore);
 
-        if (!configManager.getNaturalOres().contains(ore)) {
+        if (!naturalOres.contains(ore)) {
             return;
         }
 
@@ -118,17 +128,17 @@ public class BlockListener implements Listener {
             plugin.getLogger().info("Processing natural ore break for " + player.getName() + " at " + formatLocation(loc));
         }
 
-        context.getDecoyService().trackOreBreak(player, block, ore);
+        decoyService.trackOreBreak(player, block, ore);
 
         // Orchestrator trigger for Xray detection
-        context.getDetectionOrchestrator().runDetection(player, net.denfry.owml.detection.CheatCategory.XRAY);
+        detectionOrchestrator.runDetection(player, net.denfry.owml.detection.CheatCategory.XRAY);
 
-        if (context.getDecoyService().isDecoy(loc)) {
+        if (decoyService.isDecoy(loc)) {
             if (configManager.isCachedDebugEnabled()) {
                 plugin.getLogger().info("Decoy ore detected for " + player.getName() + " at " + formatLocation(loc));
             }
 
-            context.getSuspiciousService().addSuspicious(player.getUniqueId());
+            suspiciousService.addSuspicious(player.getUniqueId());
 
             punishmentManager.checkAndPunish(player);
 
@@ -137,7 +147,11 @@ public class BlockListener implements Listener {
             }
             String friendlyWorld = getFriendlyWorldName(loc.getWorld());
             String formattedLoc = formatLocation(loc);
-            String rawMessage = "Player " + player.getName() + " broke a decoy ore at " + friendlyWorld + " " + formattedLoc;
+            String rawMessage = new StringBuilder()
+                .append("Player ").append(player.getName())
+                .append(" broke a decoy ore at ").append(friendlyWorld)
+                .append(" ").append(formattedLoc)
+                .toString();
             event.getPlayer().getServer().getLogger().warning(rawMessage);
             if (configManager.isStaffAlertEnabled()) {
                 staffAlertManager.alertStaffWithTeleport(player, loc, rawMessage);
@@ -150,7 +164,7 @@ public class BlockListener implements Listener {
                 );
             }
 
-            context.getDecoyService().removeDecoy(loc);
+            decoyService.removeDecoy(loc);
             return;
         }
 

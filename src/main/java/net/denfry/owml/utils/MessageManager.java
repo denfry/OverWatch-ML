@@ -234,12 +234,6 @@ public class MessageManager {
             default -> plugin.getLogger().info(formatted);
         }
 
-        // Also log to web panel
-        try {
-            net.denfry.owml.web.WebLogHandler.addLog(level.toUpperCase(), formatted);
-        } catch (Exception e) {
-            // Ignore if web logging fails
-        }
     }
 
     /**

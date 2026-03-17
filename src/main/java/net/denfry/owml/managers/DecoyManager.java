@@ -10,6 +10,8 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -25,16 +27,16 @@ public class DecoyManager {
     private final ConfigManager configManager;
 
 
-    private final Map<Location, Material> decoyMap = new HashMap<>();
-    private final Map<UUID, OreTracker> trackerMap = new HashMap<>();
-    private final Set<LocationWrapper> playerPlacedOre = new HashSet<>();
+    private final ConcurrentMap<Location, Material> decoyMap = new ConcurrentHashMap<>();
+    private final ConcurrentMap<UUID, OreTracker> trackerMap = new ConcurrentHashMap<>();
+    private final Set<LocationWrapper> playerPlacedOre = ConcurrentHashMap.newKeySet();
 
 
-    private final Map<Location, Set<Location>> veinMap = new HashMap<>();
-    private final Map<Location, Map<Location, Material>> originalBlockTypes = new HashMap<>();
+    private final ConcurrentMap<Location, Set<Location>> veinMap = new ConcurrentHashMap<>();
+    private final ConcurrentMap<Location, Map<Location, Material>> originalBlockTypes = new ConcurrentHashMap<>();
 
 
-    private final Map<Location, UUID> decoyOwners = new HashMap<>();
+    private final ConcurrentMap<Location, UUID> decoyOwners = new ConcurrentHashMap<>();
 
 
     private final BlockFace[] ADJACENT_FACES = {BlockFace.UP, BlockFace.DOWN, BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST};

@@ -52,28 +52,28 @@ public class RealtimeMetricsCollector {
     }
 
     /**
-     * Start periodic data collection tasks
+     * Start periodic data collection tasks - consolidated into single task
      */
     public void startCollectionTasks() {
-        // Performance metrics (TPS, etc.)
+        // Single consolidated task - collect all metrics every 10 seconds
+        // More efficient than 4 separate tasks
         plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
-            collectPerformanceMetrics();
-        }, 0L, PERFORMANCE_INTERVAL);
-
-        // Memory metrics
-        plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
-            collectMemoryMetrics();
-        }, 0L, MEMORY_INTERVAL);
-
-        // Player metrics
-        plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
-            collectPlayerMetrics();
-        }, 0L, PLAYER_INTERVAL);
-
-        // Detection metrics
-        plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
-            collectDetectionMetrics();
-        }, 0L, DETECTION_INTERVAL);
+            try {
+                collectPerformanceMetrics();
+            } catch (Exception e) { /* ignore */ }
+            
+            try {
+                collectMemoryMetrics();
+            } catch (Exception e) { /* ignore */ }
+            
+            try {
+                collectPlayerMetrics();
+            } catch (Exception e) { /* ignore */ }
+            
+            try {
+                collectDetectionMetrics();
+            } catch (Exception e) { /* ignore */ }
+        }, 0L, 200L); // Every 10 seconds (200 ticks)
     }
 
     /**

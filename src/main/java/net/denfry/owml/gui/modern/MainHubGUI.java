@@ -23,6 +23,16 @@ public class MainHubGUI implements OverWatchGUI {
     private final OverWatchML plugin;
     private final Inventory inventory;
     private boolean punishmentsPaused = false;
+    
+    // Cached data for performance - refresh only every 2 seconds
+    private long lastRefreshTime = 0;
+    private static final long CACHE_DURATION_MS = 2000;
+    private double cachedTPS = 20.0;
+    private boolean cachedMLActive = false;
+    private double cachedAccuracy = 0.0;
+    private int cachedOnlinePlayers = 0;
+    private int cachedSuspiciousCount = 0;
+    private List<StaffAlertManager.AlertRecord> cachedAlerts = null;
 
     public MainHubGUI(OverWatchML plugin) {
         this.plugin = plugin;
@@ -43,17 +53,39 @@ public class MainHubGUI implements OverWatchGUI {
 
     @Override
     public void refresh(Player player) {
+        long now = System.currentTimeMillis();
+        
+        // Update cache if expired (every 2 seconds)
+        if (now - lastRefreshTime > CACHE_DURATION_MS) {
+            cachedTPS = Bukkit.getTPS()[0];
+            cachedOnlinePlayers = Bukkit.getOnlinePlayers().size();
+            
+            if (plugin.getMLManager() != null) {
+                cachedMLActive = plugin.getMLManager().isTrained();
+                cachedAccuracy = plugin.getMLManager().getComprehensiveStats().learningStats.getAverageAccuracy() * 100;
+            }
+            
+            cachedAlerts = plugin.getStaffAlertManager().getAlertHistory();
+            
+            ISuspiciousService suspService = plugin.getContext().getSuspiciousService();
+            if (suspService != null) {
+                cachedSuspiciousCount = suspService.getSuspiciousPlayers().size();
+            }
+            
+            lastRefreshTime = now;
+        }
+        
         // --- Top row (Status) ---
-        double tps = Bukkit.getTPS()[0];
+        double tps = cachedTPS;
         Material tpsMaterial = tps >= 18.0 ? Material.LIME_STAINED_GLASS_PANE :
                 (tps >= 15.0 ? Material.YELLOW_STAINED_GLASS_PANE : Material.RED_STAINED_GLASS_PANE);
         inventory.setItem(0, ItemBuilder.material(tpsMaterial)
                 .name("§fServer Status")
-                .lore(List.of("§7TPS: §e" + String.format("%.2f", tps), "§7Online: §a" + Bukkit.getOnlinePlayers().size()))
+                .lore(List.of("§7TPS: §e" + String.format("%.2f", tps), "§7Online: §a" + cachedOnlinePlayers))
                 .build());
 
-        boolean mlActive = plugin.getMLManager().isTrained();
-        double accuracy = plugin.getMLManager().getComprehensiveStats().learningStats.getAverageAccuracy() * 100;
+        boolean mlActive = cachedMLActive;
+        double accuracy = cachedAccuracy;
         Material mlMaterial = mlActive ? Material.PURPLE_STAINED_GLASS_PANE : Material.RED_STAINED_GLASS_PANE;
         inventory.setItem(1, ItemBuilder.material(mlMaterial)
                 .name("§dML System")
@@ -61,7 +93,7 @@ public class MainHubGUI implements OverWatchGUI {
                         "§7Accuracy: §e" + String.format("%.1f%%", accuracy)))
                 .build());
 
-        List<StaffAlertManager.AlertRecord> alerts = plugin.getStaffAlertManager().getAlertHistory();
+        List<StaffAlertManager.AlertRecord> alerts = cachedAlerts;
         inventory.setItem(2, ItemBuilder.material(Material.RED_STAINED_GLASS_PANE)
                 .name("§cUnread Alerts: " + (alerts != null ? alerts.size() : 0))
                 .build());
@@ -93,7 +125,7 @@ public class MainHubGUI implements OverWatchGUI {
 
         inventory.setItem(10, ItemBuilder.material(Material.PLAYER_HEAD)
                 .skull("Steve")
-                .name("§cSuspicious Players (" + highRiskPlayers.size() + ")")
+                .name("§cSuspicious Players (" + cachedSuspiciousCount + ")")
                 .lore(suspLore)
                 .build());
 

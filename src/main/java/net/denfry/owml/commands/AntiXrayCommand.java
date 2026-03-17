@@ -29,7 +29,6 @@ public class AntiXrayCommand implements CommandExecutor, TabCompleter {
 
     private void registerSubCommands() {
         register(new ReloadCommand(plugin));
-        register(new AdminPanelCommand(plugin));
         register(new MLCommand(plugin));
         register(new AlertCommand(plugin));
         register(new DebugCommand(plugin));

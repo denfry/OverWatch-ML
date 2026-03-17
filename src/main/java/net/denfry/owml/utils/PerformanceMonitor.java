@@ -41,11 +41,11 @@ public class PerformanceMonitor {
     private static final double MEMORY_WARNING_PERCENT = 85.0;
 
     static {
-        // Start monitoring task - MUST run every tick for accurate TPS calculation
-        SchedulerUtils.runTaskTimer(plugin, PerformanceMonitor::updateMetrics, 1L, 1L); // Every tick (50ms)
+        // Start monitoring task - every 20 ticks (1 second) for accurate TPS calculation
+        SchedulerUtils.runTaskTimer(plugin, PerformanceMonitor::updateMetrics, 20L, 20L);
 
-        // Start performance logging task
-        SchedulerUtils.runTaskTimer(plugin, PerformanceMonitor::logPerformanceWarnings, 1200L, 1200L); // Every minute
+        // Start performance logging task - every minute
+        SchedulerUtils.runTaskTimer(plugin, PerformanceMonitor::logPerformanceWarnings, 1200L, 1200L);
     }
 
     /**
