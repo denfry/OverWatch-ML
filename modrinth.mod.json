@@ -1,0 +1,18 @@
+{
+  "project_id": "TT5IPxXT",
+  "version_number": "2.2.0",
+  "dependencies": [
+    {
+      "project_id": "ProtocolLib",
+      "version_type": "required"
+    }
+  ],
+  "game_versions": [
+    "1.21.*"
+  ],
+  "version_type": "release",
+  "loaders": [
+    "paper"
+  ],
+  "featured": false
+}

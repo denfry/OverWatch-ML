@@ -1,5 +1,5 @@
 name: OverWatch-ML
-version: '2.1.0'
+version: '2.2.0'
 main: net.denfry.owml.OverWatchML
 api-version: '1.21'
 depend: [ProtocolLib]
