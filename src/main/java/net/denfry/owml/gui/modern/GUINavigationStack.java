@@ -3,12 +3,13 @@ package net.denfry.owml.gui.modern;
 import org.bukkit.entity.Player;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Хранит стек навигации GUI для каждого игрока.
+ * Stores GUI navigation stack for each player.
  */
 public class GUINavigationStack {
-    private static final Map<UUID, Deque<OverWatchGUI>> playerStacks = new HashMap<>();
+    private static final Map<UUID, Deque<OverWatchGUI>> playerStacks = new ConcurrentHashMap<>();
 
     public static void push(Player player, OverWatchGUI gui) {
         playerStacks.computeIfAbsent(player.getUniqueId(), k -> new ArrayDeque<>()).push(gui);
@@ -22,8 +23,8 @@ public class GUINavigationStack {
             if (stack != null) stack.clear();
             return null;
         }
-        
-        stack.pop(); // Удаляем текущий
+
+        stack.pop(); // Remove current
         OverWatchGUI previous = stack.peek();
         if (previous != null) {
             previous.open(player);
@@ -40,5 +41,15 @@ public class GUINavigationStack {
     public static OverWatchGUI peek(Player player) {
         Deque<OverWatchGUI> stack = playerStacks.get(player.getUniqueId());
         return (stack != null) ? stack.peek() : null;
+    }
+
+    public static boolean hasStack(Player player) {
+        Deque<OverWatchGUI> stack = playerStacks.get(player.getUniqueId());
+        return stack != null && !stack.isEmpty();
+    }
+
+    public static int getStackSize(Player player) {
+        Deque<OverWatchGUI> stack = playerStacks.get(player.getUniqueId());
+        return stack != null ? stack.size() : 0;
     }
 }

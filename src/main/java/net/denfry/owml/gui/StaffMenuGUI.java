@@ -23,18 +23,6 @@ public class StaffMenuGUI implements OverWatchGUI {
         this.inventory = Bukkit.createInventory(this, 54, "§bOverWatch-ML §8- §9Control Panel");
     }
 
-    // Legacy support
-    private static OverWatchML staticPlugin;
-    public static void setPlugin(OverWatchML overwatchML) {
-        staticPlugin = overwatchML;
-    }
-    public StaffMenuGUI() {
-        this(staticPlugin);
-    }
-    public void openInventory(Player player) {
-        open(player);
-    }
-
     @Override
     public void open(Player player) {
         refresh(player);
@@ -121,15 +109,42 @@ public class StaffMenuGUI implements OverWatchGUI {
     public void handleClick(InventoryClickEvent event) {
         Player player = (Player) event.getWhoClicked();
         int slot = event.getSlot();
+        
+        String actionName = "Unknown";
 
         switch (slot) {
-            case 11 -> GUINavigationStack.push(player, new SuspiciousPlayersGUI(plugin));
-            case 13 -> GUINavigationStack.push(player, new MainHubGUI(plugin));
-            case 15 -> player.sendMessage("§bAnalytics module is under construction.");
-            case 29 -> GUINavigationStack.push(player, new MLDashboardGUI(plugin));
-            case 31 -> GUINavigationStack.push(player, new LiveAlertsGUI(plugin));
-            case 33 -> GUINavigationStack.push(player, new PunishmentPanelGUI(plugin));
-            case 49 -> player.closeInventory();
+            case 11:
+                actionName = "Open Suspicious Activity";
+                GUINavigationStack.push(player, new SuspiciousPlayersGUI(plugin));
+                break;
+            case 13:
+                actionName = "Open Main Hub";
+                GUINavigationStack.push(player, new MainHubGUI(plugin));
+                break;
+            case 15:
+                actionName = "Open Player Analytics";
+                GUINavigationStack.push(player, new net.denfry.owml.gui.subgui.PlayerStatsMainGUI(plugin));
+                break;
+            case 29:
+                actionName = "Open ML Tools";
+                GUINavigationStack.push(player, new MLDashboardGUI(plugin));
+                break;
+            case 31:
+                actionName = "Open Live Alerts";
+                GUINavigationStack.push(player, new LiveAlertsGUI(plugin));
+                break;
+            case 33:
+                actionName = "Open Punishment Panel";
+                GUINavigationStack.push(player, new PunishmentPanelGUI(plugin));
+                break;
+            case 49:
+                actionName = "Close Menu";
+                player.closeInventory();
+                break;
+        }
+        
+        if (!actionName.equals("Unknown")) {
+            plugin.getLogger().info("GUI: " + player.getName() + " -> " + actionName);
         }
     }
 

@@ -113,6 +113,8 @@ public class MLDashboardGUI implements OverWatchGUI {
     public void handleClick(InventoryClickEvent event) {
         Player player = (Player) event.getWhoClicked();
         int slot = event.getSlot();
+        
+        String actionName = "Unknown";
 
         switch (slot) {
             case 37: // Auto-Training
@@ -120,6 +122,7 @@ public class MLDashboardGUI implements OverWatchGUI {
                     GUIEffects.playError(player);
                     return;
                 }
+                actionName = "Start Auto-Training";
                 trainingInProgress = true;
                 refresh(player);
                 org.bukkit.boss.BossBar bar = GUIEffects.showProgressBar(player, "§dML Model Retraining...");
@@ -135,22 +138,29 @@ public class MLDashboardGUI implements OverWatchGUI {
                 });
                 break;
             case 39: // Add Example
-                player.sendMessage("§bSelect a player to add as training example...");
-                // TODO: Open PlayerSelectorGUI
+                actionName = "Open ML Training Management";
+                GUINavigationStack.push(player, new net.denfry.owml.gui.subgui.MLAnalysisGUI(plugin));
                 break;
             case 41: // Reset Model
+                actionName = "Reset ML Model";
                 GUIEffects.showConfirmDialog(player, "§4Wipe ML Model?", () -> {
                     GUIEffects.showChatPrompt(player, "Type 'CONFIRM' to wipe the model (15s):", 15).thenAccept(text -> {
                         if ("CONFIRM".equalsIgnoreCase(text)) {
                             player.sendMessage("§cML Model has been reset.");
                             GUIEffects.playCriticalAlert(player);
+                            plugin.getLogger().warning("GUI: " + player.getName() + " RESET ML MODEL WEIGHTS!");
                         }
                     });
                 });
                 break;
             case 49: // History
+                actionName = "View Accuracy History";
                 player.sendMessage("§fAccuracy history coming soon...");
                 break;
+        }
+        
+        if (!actionName.equals("Unknown")) {
+            plugin.getLogger().info("GUI: " + player.getName() + " -> " + actionName);
         }
     }
 

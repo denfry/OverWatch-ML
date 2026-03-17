@@ -19,7 +19,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Утилитный класс для визуальных и звуковых эффектов GUI.
+ * Utility class for GUI visual and sound effects.
  */
 public class GUIEffects {
 
@@ -40,7 +40,7 @@ public class GUIEffects {
     }
 
     /**
-     * Создает и показывает BossBar с прогрессом.
+     * Creates and shows a BossBar with progress.
      */
     public static BossBar showProgressBar(Player player, String title) {
         BossBar bar = Bukkit.createBossBar(title, BarColor.PURPLE, BarStyle.SEGMENTED_10);
@@ -57,9 +57,9 @@ public class GUIEffects {
         JavaPlugin plugin = JavaPlugin.getProvidingPlugin(GUIEffects.class);
 
         player.sendMessage("§b[OverWatch] §f" + message);
-        player.sendMessage("§7Введите 'cancel' для отмены.");
+        player.sendMessage("§7Type 'cancel' to cancel.");
 
-        BossBar bar = Bukkit.createBossBar("§eОжидание ввода... (" + timeoutSeconds + "с)", BarColor.YELLOW, BarStyle.SOLID);
+        BossBar bar = Bukkit.createBossBar("§eWaiting for input... (" + timeoutSeconds + "s)", BarColor.YELLOW, BarStyle.SOLID);
         bar.addPlayer(player);
 
         int[] timeLeft = {timeoutSeconds};
@@ -68,10 +68,10 @@ public class GUIEffects {
             if (timeLeft[0] <= 0) {
                 if (!future.isDone()) {
                     future.complete(null);
-                    player.sendMessage("§cВремя ожидания истекло. Ввод отменен.");
+                    player.sendMessage("§cInput timeout. Request cancelled.");
                 }
             } else {
-                bar.setTitle("§eОжидание ввода... (" + timeLeft[0] + "с)");
+                bar.setTitle("§eWaiting for input... (" + timeLeft[0] + "s)");
                 bar.setProgress((double) timeLeft[0] / timeoutSeconds);
             }
         }, 20L, 20L);
@@ -82,12 +82,32 @@ public class GUIEffects {
                 if (e.getPlayer().equals(player)) {
                     e.setCancelled(true);
                     String text = e.getMessage();
-                    
+
                     Bukkit.getScheduler().runTask(plugin, () -> {
                         if (!future.isDone()) {
                             if (text.equalsIgnoreCase("cancel")) {
                                 future.complete(null);
-                                player.sendMessage("§cВвод отменен пользователем.");
+                                player.sendMessage("§cInput cancelled by user.");
+                            } else {
+                                future.complete(text);
+                            }
+                        }
+                    });
+                    HandlerList.unregisterAll(this);
+                }
+            }
+
+            @EventHandler(priority = EventPriority.LOWEST)
+            public void onChatModern(org.bukkit.event.player.PlayerChatEvent e) {
+                if (e.getPlayer().equals(player)) {
+                    e.setCancelled(true);
+                    String text = e.getMessage();
+
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        if (!future.isDone()) {
+                            if (text.equalsIgnoreCase("cancel")) {
+                                future.complete(null);
+                                player.sendMessage("§cInput cancelled by user.");
                             } else {
                                 future.complete(text);
                             }
@@ -97,7 +117,7 @@ public class GUIEffects {
                 }
             }
         };
-        
+
         Bukkit.getPluginManager().registerEvents(listener, plugin);
 
         future.whenComplete((res, err) -> {
@@ -110,7 +130,7 @@ public class GUIEffects {
     }
 
     /**
-     * Открывает диалог подтверждения.
+     * Opens a confirmation dialog.
      */
     public static void showConfirmDialog(Player player, String question, Runnable onConfirm) {
         OverWatchGUI confirmGui = new OverWatchGUI() {

@@ -57,8 +57,12 @@ public class MLDataListener implements Listener {
             features[0] = timeSinceLastOre;
             features[1] = state.oresFound / (Math.max(1, (now - state.sessionStart) / 60000.0)); // Ores per min
             
-            // 2. РџСЂРѕСЃС‚СЂР°РЅСЃС‚РІРµРЅРЅС‹Рµ РїСЂРёР·РЅР°РєРё
-            double dist = state.lastOreLoc != null ? block.getLocation().distance(state.lastOreLoc) : 0;
+            // 2. Spatial features
+            double dist = 0;
+            if (state.lastOreLoc != null && state.lastOreLoc.getWorld() != null && 
+                state.lastOreLoc.getWorld().equals(block.getWorld())) {
+                dist = block.getLocation().distance(state.lastOreLoc);
+            }
             features[2] = dist;
             features[3] = block.getY(); // Y-level variance can be calculated later, storing Y for now
             
@@ -102,6 +106,10 @@ public class MLDataListener implements Listener {
         UUID uuid = attacker.getUniqueId();
         PlayerSessionState state = getState(uuid);
         long now = System.currentTimeMillis();
+
+        if (attacker.getWorld() == null || target.getWorld() == null || !attacker.getWorld().equals(target.getWorld())) {
+            return;
+        }
 
         double distance = attacker.getLocation().distance(target.getLocation());
         int ping = attacker.getPing();

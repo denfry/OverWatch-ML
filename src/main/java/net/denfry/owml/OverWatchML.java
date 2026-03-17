@@ -90,6 +90,7 @@ public class OverWatchML extends JavaPlugin {
             long phaseStart = System.currentTimeMillis();
             initializeBasics();
             setupConfiguration();
+            setupMetricsAndServices();
             context = new OverWatchContext(this, configManager);
             context.loadAll();
             MessageManager.logStartup("Phase 2 (Config) completed in {TIME}ms", "TIME", System.currentTimeMillis() - phaseStart);
@@ -205,7 +206,6 @@ public class OverWatchML extends JavaPlugin {
         decoyManager = new DecoyManager(this, configManager);
         punishmentManager = new PunishmentManager(configManager, this);
 
-        StaffMenuGUI.setPlugin(this);
         paranoiaHandler = new ParanoiaHandler(this, punishmentManager, configManager);
 
         // Initialize advanced detection engine
@@ -331,14 +331,10 @@ public class OverWatchML extends JavaPlugin {
                 this
         );
 
-        // Cheat listener for various detections
         getServer().getPluginManager().registerEvents(
                 new net.denfry.owml.listeners.CheatListener(this, context),
                 this
         );
-
-        getServer().getPluginManager().registerEvents(new GuiListener(this), this);
-        getServer().getPluginManager().registerEvents(new PlayerStatsGuiListener(), this);
     }
 
     /**
@@ -348,7 +344,9 @@ public class OverWatchML extends JavaPlugin {
         if (configManager.isCommandHidingEnabled()) {
             setupCommandHiding();
         } else {
-            getCommand("OverWatch").setExecutor(new AntiXrayCommand(this, updateChecker));
+            AntiXrayCommand antiXrayCommand = new AntiXrayCommand(this, updateChecker);
+            getCommand("OverWatch").setExecutor(antiXrayCommand);
+            getCommand("OverWatch").setTabCompleter(antiXrayCommand);
         }
     }
 

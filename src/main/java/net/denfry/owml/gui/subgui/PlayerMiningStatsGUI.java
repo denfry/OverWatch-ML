@@ -1,107 +1,73 @@
 package net.denfry.owml.gui.subgui;
 
+import net.denfry.owml.OverWatchML;
+import net.denfry.owml.gui.modern.GUIEffects;
+import net.denfry.owml.gui.modern.GUINavigationStack;
+import net.denfry.owml.gui.modern.ItemBuilder;
+import net.denfry.owml.gui.modern.OverWatchGUI;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
 import net.denfry.owml.managers.StatsManager;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-public class PlayerMiningStatsGUI {
-    private final Inventory inv;
-    private final UUID targetPlayerId;
-    private final String targetPlayerName;
+public class PlayerMiningStatsGUI implements OverWatchGUI {
+    private final OverWatchML plugin;
+    private final UUID targetId;
+    private final String targetName;
+    private final Inventory inventory;
 
-    public PlayerMiningStatsGUI(UUID playerId, String playerName) {
-        this.targetPlayerId = playerId;
-        this.targetPlayerName = playerName;
-
-        inv = Bukkit.createInventory(null, 27, Component.text(targetPlayerName + "'s Mining Stats").color(NamedTextColor.BLUE));
-        initializeItems();
+    public PlayerMiningStatsGUI(OverWatchML plugin, UUID targetId, String targetName) {
+        this.plugin = plugin;
+        this.targetId = targetId;
+        this.targetName = targetName;
+        this.inventory = Bukkit.createInventory(this, 54, "Mining Stats: " + targetName);
     }
 
-    /**
-     * Handle clicks in this GUI
-     */
-    public static void handleClick(Player staff, int slot) {
+    @Override
+    public void open(Player player) {
+        refresh(player);
+        player.openInventory(inventory);
+        GUIEffects.playOpen(player);
+    }
 
-        if (slot == 26) {
-            new PlayerStatsMainGUI(0).openInventory(staff);
+    @Override
+    public void close(Player player) {}
+
+    @Override
+    public void refresh(Player player) {
+        inventory.clear();
+        Map<Material, Integer> stats = StatsManager.getOreStats(targetId);
+
+        int slot = 0;
+        for (Map.Entry<Material, Integer> entry : stats.entrySet()) {
+            if (slot >= 45) break;
+            inventory.setItem(slot++, ItemBuilder.material(entry.getKey())
+                    .name("§e" + entry.getKey().name())
+                    .lore(List.of("§7Mined: §f" + entry.getValue()))
+                    .build());
+        }
+
+        inventory.setItem(49, ItemBuilder.material(Material.BARRIER).name("§cBack").build());
+    }
+
+    @Override
+    public void handleClick(InventoryClickEvent event) {
+        Player staff = (Player) event.getWhoClicked();
+        if (event.getSlot() == 49) {
+            GUINavigationStack.pop(staff);
         }
     }
 
-    private void initializeItems() {
-
-        Map<Material, Integer> oreStats = StatsManager.getOreStats(targetPlayerId);
-
-        if (oreStats.isEmpty()) {
-
-            ItemStack noStats = new ItemStack(Material.BARRIER);
-            ItemMeta noStatsMeta = noStats.getItemMeta();
-            noStatsMeta.displayName(Component.text("No Mining Stats").color(NamedTextColor.RED));
-
-            List<Component> noStatsLore = new ArrayList<>();
-            noStatsLore.add(Component.text("This player hasn't mined any ores yet").color(NamedTextColor.GRAY));
-            noStatsMeta.lore(noStatsLore);
-
-            noStats.setItemMeta(noStatsMeta);
-            inv.setItem(13, noStats);
-        } else {
-
-            int index = 0;
-            for (Map.Entry<Material, Integer> entry : oreStats.entrySet()) {
-                ItemStack oreItem = new ItemStack(entry.getKey(), 1);
-                ItemMeta meta = oreItem.getItemMeta();
-                meta.displayName(Component.text(formatMaterialName(entry.getKey().name())).color(NamedTextColor.GOLD));
-
-                List<Component> lore = new ArrayList<>();
-                lore.add(Component.text("Mined: " + entry.getValue()).color(NamedTextColor.GRAY));
-                meta.lore(lore);
-
-                oreItem.setItemMeta(meta);
-                inv.setItem(index, oreItem);
-                index++;
-                if (index >= inv.getSize() - 1) break;
-            }
-        }
-
-
-        ItemStack backButton = new ItemStack(Material.ARROW);
-        ItemMeta backMeta = backButton.getItemMeta();
-        backMeta.displayName(Component.text("Back to 📊 Player Analytics").color(NamedTextColor.GREEN));
-        backButton.setItemMeta(backMeta);
-        inv.setItem(26, backButton);
-    }
-
-    /**
-     * Format material name to be more readable
-     */
-    private String formatMaterialName(String name) {
-        String[] words = name.split("_");
-        StringBuilder result = new StringBuilder();
-
-        for (String word : words) {
-            if (!word.isEmpty()) {
-                result.append(word.substring(0, 1).toUpperCase()).append(word.substring(1).toLowerCase()).append(" ");
-            }
-        }
-
-        return result.toString().trim();
-    }
-
-    public void openInventory(Player player) {
-        player.openInventory(inv);
-    }
-
+    @Override
     public Inventory getInventory() {
-        return inv;
+        return inventory;
     }
 }

@@ -1,38 +1,37 @@
 package net.denfry.owml.commands.subcommands;
 
+import net.denfry.owml.commands.AbstractSubCommand;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import net.denfry.owml.OverWatchML;
 import net.denfry.owml.utils.MessageManager;
 import net.denfry.owml.web.AdminPanel;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * Command for managing the administrative web panel.
- *
- * @author OverWatch Team
- * @version 1.0.0
- * @since 1.8.1
  */
-public class AdminPanelCommand implements CommandExecutor {
-
-    private final OverWatchML plugin;
+public class AdminPanelCommand extends AbstractSubCommand {
 
     public AdminPanelCommand(OverWatchML plugin) {
-        this.plugin = plugin;
+        super(plugin, "adminpanel", "owml.admin", "Manage the administrative web panel", "/owml adminpanel <start|stop|status|port> [port]", "ap");
     }
 
     @Override
-    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (!sender.hasPermission("owml.admin")) {
+    public boolean execute(@NotNull CommandSender sender, @NotNull String[] args) {
+        if (!sender.hasPermission(getPermission())) {
             MessageManager.send(sender, "command.no-permission", "PREFIX", "Admin Panel", "REASON", "manage admin panel");
             return true;
         }
 
         if (args.length < 1) {
-            sendUsage(sender, label);
+            sendUsage(sender);
             return true;
         }
 
@@ -52,7 +51,7 @@ public class AdminPanelCommand implements CommandExecutor {
                 handlePort(sender, args);
                 break;
             default:
-                sendUsage(sender, label);
+                sendUsage(sender);
                 break;
         }
 
@@ -65,7 +64,7 @@ public class AdminPanelCommand implements CommandExecutor {
             return;
         }
 
-        int port = 8080; // default port
+        int port = 8080;
 
         if (args.length >= 2) {
             try {
@@ -83,7 +82,7 @@ public class AdminPanelCommand implements CommandExecutor {
         try {
             AdminPanel.start(port);
             MessageManager.send(sender, "success.enabled", "FEATURE", "Admin panel on port " + port);
-            sender.sendMessage(Component.text("СЂСџРЉС’ Access at: http://localhost:" + port).color(NamedTextColor.AQUA));
+            sender.sendMessage(Component.text("Access at: http://localhost:" + port).color(NamedTextColor.AQUA));
         } catch (Exception e) {
             MessageManager.send(sender, "error", "Failed to start admin panel: " + e.getMessage());
         }
@@ -109,8 +108,6 @@ public class AdminPanelCommand implements CommandExecutor {
         if (enabled) {
             sender.sendMessage(Component.text("  Port: ").color(NamedTextColor.GRAY)
                     .append(Component.text(String.valueOf(port)).color(NamedTextColor.AQUA)));
-            sender.sendMessage(Component.text("  URL: ").color(NamedTextColor.GRAY)
-                    .append(Component.text("http://localhost:" + port).color(NamedTextColor.AQUA)));
         }
     }
 
@@ -132,19 +129,22 @@ public class AdminPanelCommand implements CommandExecutor {
                 MessageManager.send(sender, "error.invalid-value", "VALUE", String.valueOf(newPort), "EXPECTED", "1024-65535");
                 return;
             }
-
-            // Note: In a real implementation, you'd save this to config
-            MessageManager.send(sender, "success", "Admin panel port set to " + newPort + ". Use /" + args[0] + " start to activate.");
+            MessageManager.send(sender, "success", "Admin panel port set to " + newPort);
         } catch (NumberFormatException e) {
             MessageManager.send(sender, "error.invalid-value", "VALUE", args[1], "EXPECTED", "valid port number");
         }
     }
 
-    private void sendUsage(CommandSender sender, String label) {
-        MessageManager.send(sender, "command.usage", "USAGE", "/" + label + " adminpanel <start|stop|status|port> [port]");
-        sender.sendMessage(Component.text("  start [port] - Start admin panel on specified port (default: 8080)").color(NamedTextColor.GRAY));
-        sender.sendMessage(Component.text("  stop - Stop admin panel").color(NamedTextColor.GRAY));
-        sender.sendMessage(Component.text("  status - Show admin panel status").color(NamedTextColor.GRAY));
-        sender.sendMessage(Component.text("  port [number] - Set or show admin panel port").color(NamedTextColor.GRAY));
+    @Override
+    public @Nullable List<String> tabComplete(@NotNull CommandSender sender, @NotNull String[] args) {
+        if (args.length == 1) {
+            String partial = args[0].toLowerCase();
+            List<String> completions = new ArrayList<>();
+            for (String s : Arrays.asList("start", "stop", "status", "port")) {
+                if (s.startsWith(partial)) completions.add(s);
+            }
+            return completions;
+        }
+        return super.tabComplete(sender, args);
     }
 }

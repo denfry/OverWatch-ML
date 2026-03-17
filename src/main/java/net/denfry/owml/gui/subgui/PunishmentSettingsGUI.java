@@ -1,125 +1,98 @@
 package net.denfry.owml.gui.subgui;
 
+import net.denfry.owml.OverWatchML;
+import net.denfry.owml.config.ConfigManager;
+import net.denfry.owml.gui.modern.GUIEffects;
+import net.denfry.owml.gui.modern.GUINavigationStack;
+import net.denfry.owml.gui.modern.ItemBuilder;
+import net.denfry.owml.gui.modern.OverWatchGUI;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
-import net.denfry.owml.config.ConfigManager;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
-public class PunishmentSettingsGUI {
-    public static final String PERMISSION = "owml.gui_punishment";
-    private final Inventory inv;
+public class PunishmentSettingsGUI implements OverWatchGUI {
+    private final OverWatchML plugin;
     private final ConfigManager configManager;
+    private final Inventory inventory;
 
-    public PunishmentSettingsGUI(ConfigManager configManager) {
-        this.configManager = configManager;
-
-        inv = Bukkit.createInventory(null, 54, Component.text("⚖ Punishment System").color(NamedTextColor.AQUA));
-        initializeItems();
+    public PunishmentSettingsGUI(OverWatchML plugin) {
+        this.plugin = plugin;
+        this.configManager = plugin.getConfigManager();
+        this.inventory = Bukkit.createInventory(this, 54, "⚖ Punishment System Settings");
     }
 
-    private void initializeItems() {
+    @Override
+    public void open(Player player) {
+        refresh(player);
+        player.openInventory(inventory);
+        GUIEffects.playOpen(player);
+    }
 
+    @Override
+    public void close(Player player) {}
 
+    @Override
+    public void refresh(Player player) {
+        inventory.clear();
         for (int level = 1; level <= 6; level++) {
-            int row = level - 1;
-            int labelSlot = row * 9;
-            int punishmentSlot = row * 9 + 1;
-            int adminAlertSlot = row * 9 + 2;
-            int warningMsgSlot = row * 9 + 3;
-            int additionalSlot = row * 9 + 5;
+            int row = (level - 1) * 9;
+            boolean enabled = configManager.isPunishmentEnabled(level);
+            
+            inventory.setItem(row, ItemBuilder.material(Material.PAPER).name("§eLevel " + level).build());
+            inventory.setItem(row + 1, ItemBuilder.material(enabled ? Material.LIME_WOOL : Material.RED_WOOL)
+                    .name(enabled ? "§aEnabled" : "§cDisabled")
+                    .lore(List.of("§7Click to toggle level " + level))
+                    .build());
+            
+            boolean adminAlert = configManager.isPunishmentOptionEnabled(level, "admin_alert");
+            inventory.setItem(row + 2, ItemBuilder.material(Material.BELL)
+                    .name("§bAdmin Alerts: " + (adminAlert ? "§aON" : "§cOFF"))
+                    .build());
 
-
-            String levelTitle = "";
-            String levelDescription = "";
-
-            switch (level) {
-                case 1:
-                    levelTitle = "Level 1: Warning Phase";
-                    levelDescription = "Initial warnings and minor effects";
-                    break;
-                case 2:
-                    levelTitle = "Level 2: Minor Consequences";
-                    levelDescription = "Minor penalties and annoyances";
-                    break;
-                case 3:
-                    levelTitle = "Level 3: Moderate Punishment";
-                    levelDescription = "Temporary kicks and mining restrictions";
-                    break;
-                case 4:
-                    levelTitle = "Level 4: Severe Consequences";
-                    levelDescription = "Extended bans and significant restrictions";
-                    break;
-                case 5:
-                    levelTitle = "Level 5: Critical Response";
-                    levelDescription = "Long-term ban and permanent effects";
-                    break;
-                case 6:
-                    levelTitle = "Level 6: Maximum Enforcement";
-                    levelDescription = "Permanent ban and security measures";
-                    break;
-            }
-
-
-            inv.setItem(labelSlot, createGuiItem(Material.PAPER, levelTitle, Component.text(levelDescription).color(NamedTextColor.GRAY)));
-
-
-            boolean punishmentEnabled = configManager.isPunishmentEnabled(level);
-            Material toggleMaterial = punishmentEnabled ? Material.GREEN_WOOL : Material.RED_WOOL;
-            String toggleStatus = punishmentEnabled ? "Enabled" : "Disabled";
-            inv.setItem(punishmentSlot, createGuiItem(toggleMaterial, "Level " + level + " Punishment", Component.text("Status: " + toggleStatus).color(punishmentEnabled ? NamedTextColor.GREEN : NamedTextColor.RED)));
-
-
-            boolean adminAlertEnabled = configManager.isPunishmentOptionEnabled(level, "admin_alert");
-            Material adminAlertMaterial = adminAlertEnabled ? Material.BELL : Material.GRAY_DYE;
-            String adminAlertStatus = adminAlertEnabled ? "Enabled" : "Disabled";
-            inv.setItem(adminAlertSlot, createGuiItem(adminAlertMaterial, "Admin Alerts", Component.text("Status: " + adminAlertStatus).color(adminAlertEnabled ? NamedTextColor.GREEN : NamedTextColor.RED), Component.text("Notify staff when this punishment is triggered").color(NamedTextColor.GRAY)));
-
-
-            boolean warningMsgEnabled = configManager.isPunishmentOptionEnabled(level, "warning_message");
-            Material warningMsgMaterial = warningMsgEnabled ? Material.BOOK : Material.GRAY_DYE;
-            String warningMsgStatus = warningMsgEnabled ? "Enabled" : "Disabled";
-            inv.setItem(warningMsgSlot, createGuiItem(warningMsgMaterial, "Warning Messages", Component.text("Status: " + warningMsgStatus).color(warningMsgEnabled ? NamedTextColor.GREEN : NamedTextColor.RED), Component.text("Show warning messages to players").color(NamedTextColor.GRAY)));
-
-
-            inv.setItem(additionalSlot, createGuiItem(Material.WRITABLE_BOOK, "Advanced settings", Component.text("Click to configure Level " + level).color(NamedTextColor.GRAY)));
+            inventory.setItem(row + 5, ItemBuilder.material(Material.WRITABLE_BOOK)
+                    .name("§6Advanced Settings")
+                    .lore(List.of("§7Click to configure level " + level))
+                    .build());
         }
-
-
-        inv.setItem(52, createGuiItem(Material.OAK_SIGN, "Icon Guide", Component.text("🟢/🔴 - Enable/Disable level").color(NamedTextColor.GRAY), Component.text("🔔 - Admin alerts").color(NamedTextColor.GRAY), Component.text("📖 - Warning messages").color(NamedTextColor.GRAY), Component.text("📝 - Advanced settings").color(NamedTextColor.GRAY)));
-
-
-        inv.setItem(53, createGuiItem(Material.BARRIER, "Back to ⛏ Staff Control Panel"));
+        inventory.setItem(53, ItemBuilder.material(Material.BARRIER).name("§cBack").build());
     }
 
-    private ItemStack createGuiItem(Material material, String name, Component... lore) {
-        ItemStack item = new ItemStack(material, 1);
-        ItemMeta meta = item.getItemMeta();
-        meta.displayName(Component.text(name).color(NamedTextColor.GOLD));
+    @Override
+    public void handleClick(InventoryClickEvent event) {
+        Player player = (Player) event.getWhoClicked();
+        int slot = event.getSlot();
 
-        if (lore.length > 0) {
-            List<Component> loreList = new ArrayList<>();
-            Collections.addAll(loreList, lore);
-            meta.lore(loreList);
-        }
-
-        item.setItemMeta(meta);
-        return item;
-    }
-
-    public void openInventory(Player player) {
-        if (!player.hasPermission(PERMISSION)) {
-            player.sendMessage(Component.text("You do not have permission to manage punishment settings.").color(NamedTextColor.RED));
+        if (slot == 53) {
+            GUINavigationStack.pop(player);
             return;
         }
-        player.openInventory(inv);
+
+        int level = (slot / 9) + 1;
+        int col = slot % 9;
+
+        if (level >= 1 && level <= 6) {
+            if (col == 1) {
+                boolean current = configManager.isPunishmentEnabled(level);
+                configManager.setPunishmentEnabled(level, !current);
+                refresh(player);
+            } else if (col == 2) {
+                boolean current = configManager.isPunishmentOptionEnabled(level, "admin_alert");
+                configManager.setPunishmentOptionEnabled(level, "admin_alert", !current);
+                refresh(player);
+            } else if (col == 5) {
+                GUINavigationStack.push(player, new LevelPunishmentSettingsGUI(plugin, level));
+            }
+        }
+    }
+
+    @Override
+    public Inventory getInventory() {
+        return inventory;
     }
 }

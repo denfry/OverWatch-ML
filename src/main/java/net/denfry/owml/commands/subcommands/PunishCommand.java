@@ -1,31 +1,35 @@
 package net.denfry.owml.commands.subcommands;
 
+import net.denfry.owml.commands.AbstractSubCommand;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import net.denfry.owml.OverWatchML;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-public class PunishCommand implements CommandExecutor {
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
-    private final OverWatchML plugin;
+public class PunishCommand extends AbstractSubCommand {
 
     public PunishCommand(OverWatchML plugin) {
-        this.plugin = plugin;
+        super(plugin, "punish", "owml.punish", "Manage player punishments", "/owml punish <set|remove|check> <player> [level]", "p", "ban");
     }
 
     @Override
-    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (!sender.hasPermission("owml.punish")) {
-            sender.sendMessage(Component.text("You don't have permission to manage punishments.").color(NamedTextColor.RED));
+    public boolean execute(@NotNull CommandSender sender, @NotNull String[] args) {
+        if (!sender.hasPermission(getPermission())) {
+            sendNoPermission(sender);
             return true;
         }
 
         if (args.length < 2) {
-            sender.sendMessage(Component.text("Usage: /OverWatch punish <set|remove|check> <player> [level]").color(NamedTextColor.RED));
+            sendUsage(sender);
             return true;
         }
 
@@ -41,7 +45,7 @@ public class PunishCommand implements CommandExecutor {
         switch (action) {
             case "set":
                 if (args.length < 3) {
-                    sender.sendMessage(Component.text("Usage: /OverWatch punish set <player> <level>").color(NamedTextColor.RED));
+                    sender.sendMessage(Component.text("Usage: /owml punish set <player> <level>").color(NamedTextColor.RED));
                     return true;
                 }
 
@@ -58,93 +62,46 @@ public class PunishCommand implements CommandExecutor {
                 }
 
                 plugin.getPunishmentManager().setPunishmentLevel(targetPlayer, level);
-                if (level > 0 && plugin.getConfigManager().isWebhookAlertEnabled("punishment_applied")) {
-                    String adminName = sender.getName();
-                    if (!(sender instanceof Player)) {
-                        adminName = "Console";
-                    }
-
-                    String punishmentType;
-                    switch (level) {
-                        case 1:
-                            punishmentType = "Warning Phase";
-                            break;
-                        case 2:
-                            punishmentType = "Minor Consequences";
-                            break;
-                        case 3:
-                            punishmentType = "Moderate Punishment";
-                            break;
-                        case 4:
-                            punishmentType = "Severe Consequences";
-                            break;
-                        case 5:
-                            punishmentType = "Critical Response";
-                            break;
-                        case 6:
-                            punishmentType = "Maximum Enforcement";
-                            break;
-                        default:
-                            punishmentType = "Level " + level + " Punishment";
-                    }
-
-                    plugin.getWebhookManager().sendPunishmentAlertWithAdmin(targetPlayer, level, punishmentType, adminName);
-                } else if (level == 0 && plugin.getConfigManager().isWebhookAlertEnabled("staff_actions")) {
-                    String adminName = sender.getName();
-                    if (!(sender instanceof Player)) {
-                        adminName = "Console";
-                    }
-
-                    plugin.getWebhookManager().sendStaffActionLog(adminName, "Removed punishment from " + targetPlayer.getName(), "Set to level 0");
-                }
-
-                if (level == 0) {
-                    sender.sendMessage(Component.text("Removed all punishments from " + targetPlayer.getName()).color(NamedTextColor.GREEN));
-                } else {
-                    sender.sendMessage(Component.text("Applied punishment level " + level + " to " + targetPlayer.getName()).color(NamedTextColor.GREEN));
-                }
+                sender.sendMessage(Component.text("Applied punishment level " + level + " to " + targetPlayer.getName()).color(NamedTextColor.GREEN));
                 break;
 
             case "remove":
-                int currentPunishmentLevel = plugin.getPunishmentManager().getPlayerPunishmentLevel(targetPlayer.getUniqueId());
                 plugin.getPunishmentManager().removePunishment(targetPlayer);
-
-                if (currentPunishmentLevel > 0 && plugin.getConfigManager().isWebhookAlertEnabled("staff_actions")) {
-                    String adminName = sender.getName();
-                    if (!(sender instanceof Player)) {
-                        adminName = "Console";
-                    }
-
-                    plugin.getWebhookManager().sendStaffActionLog(adminName, "Removed punishment from " + targetPlayer.getName(), "Previous level: " + currentPunishmentLevel);
-                }
-
                 sender.sendMessage(Component.text("Removed all punishments from " + targetPlayer.getName()).color(NamedTextColor.GREEN));
                 break;
 
             case "check":
                 int currentLevel = plugin.getPunishmentManager().getPlayerPunishmentLevel(targetPlayer.getUniqueId());
-
-                if (plugin.getConfigManager().isWebhookAlertEnabled("staff_actions")) {
-                    String adminName = sender.getName();
-                    if (!(sender instanceof Player)) {
-                        adminName = "Console";
-                    }
-
-                    plugin.getWebhookManager().sendStaffActionLog(adminName, "Checked punishment status for " + targetPlayer.getName(), "Current level: " + (currentLevel > 0 ? currentLevel : "None"));
-                }
-
-                if (currentLevel > 0) {
-                    sender.sendMessage(Component.text(targetPlayer.getName() + " is currently at punishment level " + currentLevel).color(NamedTextColor.GREEN));
-                } else {
-                    sender.sendMessage(Component.text(targetPlayer.getName() + " currently has no active punishments").color(NamedTextColor.GREEN));
-                }
+                sender.sendMessage(Component.text(targetPlayer.getName() + " is currently at punishment level " + currentLevel).color(NamedTextColor.GREEN));
                 break;
 
             default:
-                sender.sendMessage(Component.text("Invalid action. Use 'set', 'remove', or 'check'.").color(NamedTextColor.RED));
+                sendUsage(sender);
                 break;
         }
 
         return true;
+    }
+
+    @Override
+    public @Nullable List<String> tabComplete(@NotNull CommandSender sender, @NotNull String[] args) {
+        if (args.length == 1) {
+            String partial = args[0].toLowerCase();
+            List<String> completions = new ArrayList<>();
+            for (String s : Arrays.asList("set", "remove", "check")) {
+                if (s.startsWith(partial)) completions.add(s);
+            }
+            return completions;
+        } else if (args.length == 2) {
+            String partial = args[1].toLowerCase();
+            List<String> completions = new ArrayList<>();
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (p.getName().toLowerCase().startsWith(partial)) completions.add(p.getName());
+            }
+            return completions;
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("set")) {
+            return Arrays.asList("0", "1", "2", "3", "4", "5", "6");
+        }
+        return Collections.emptyList();
     }
 }

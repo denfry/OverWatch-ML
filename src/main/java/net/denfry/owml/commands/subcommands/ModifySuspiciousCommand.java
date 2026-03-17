@@ -1,85 +1,60 @@
 package net.denfry.owml.commands.subcommands;
 
+import net.denfry.owml.commands.AbstractSubCommand;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import net.denfry.owml.OverWatchML;
 import net.denfry.owml.managers.SuspiciousManager;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-public class ModifySuspiciousCommand implements CommandExecutor {
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
-    private final OverWatchML plugin;
+public class ModifySuspiciousCommand extends AbstractSubCommand {
 
     public ModifySuspiciousCommand(OverWatchML plugin) {
-        this.plugin = plugin;
+        super(plugin, "points", "owml.modify", "Modify player suspicious points", "/owml points <add|remove|set|check> <player> [amount]");
     }
 
-    /**
-     * Command usage:
-     * /OverWatch points add <player> <amount>
-     * /OverWatch points remove <player> <amount>
-     * /OverWatch points set <player> <amount>
-     * /OverWatch points check <player>
-     */
     @Override
-    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (!sender.hasPermission("owml.modify")) {
-            sender.sendMessage(Component.text("You do not have permission to modify player points.").color(NamedTextColor.RED));
+    public boolean execute(@NotNull CommandSender sender, @NotNull String[] args) {
+        if (!sender.hasPermission(getPermission())) {
+            sendNoPermission(sender);
             return true;
         }
 
         if (args.length < 2) {
-            showUsage(sender);
+            sendUsage(sender);
             return true;
         }
 
         String action = args[0].toLowerCase();
+        String targetName = args[1];
+        OfflinePlayer target = Bukkit.getOfflinePlayer(targetName);
 
-        if (action.equals("check") && args.length >= 2) {
-            String targetName = args[1];
-            OfflinePlayer target = Bukkit.getOfflinePlayer(targetName);
-
-            if (target == null || (!target.isOnline() && !target.hasPlayedBefore())) {
-                sender.sendMessage(Component.text("Player not found: " + targetName).color(NamedTextColor.RED));
-                return true;
-            }
-
+        if (action.equalsIgnoreCase("check")) {
             int currentPoints = SuspiciousManager.getSuspiciousCounts().getOrDefault(target.getUniqueId(), 0);
-            sender.sendMessage(Component.text(target.getName() + "'s suspicious points: ").color(NamedTextColor.YELLOW).append(Component.text(currentPoints).color(NamedTextColor.WHITE)));
-            if (plugin.getConfigManager().isWebhookAlertEnabled("staff_actions")) {
-                String adminName = sender.getName();
-                if (!(sender instanceof Player)) {
-                    adminName = "Console";
-                }
-
-                plugin.getWebhookManager().sendStaffActionLog(adminName, "Checked suspicious points for " + target.getName(), "Current points: " + currentPoints);
-            }
-
+            sender.sendMessage(Component.text(targetName + "'s suspicious points: " + currentPoints).color(NamedTextColor.YELLOW));
             return true;
         }
 
         if (args.length < 3) {
-            showUsage(sender);
+            sendUsage(sender);
             return true;
         }
 
-        String targetName = args[1];
         int amount;
         try {
             amount = Integer.parseInt(args[2]);
         } catch (NumberFormatException e) {
-            sender.sendMessage(Component.text("Invalid amount: " + args[2]).color(NamedTextColor.RED));
-            return true;
-        }
-
-        OfflinePlayer target = Bukkit.getOfflinePlayer(targetName);
-        if (target == null || (!target.isOnline() && !target.hasPlayedBefore())) {
-            sender.sendMessage(Component.text("Player not found: " + targetName).color(NamedTextColor.RED));
+            sender.sendMessage(Component.text("Invalid amount.").color(NamedTextColor.RED));
             return true;
         }
 
@@ -87,58 +62,35 @@ public class ModifySuspiciousCommand implements CommandExecutor {
         int newCount = currentCount;
 
         switch (action) {
-            case "add":
-                newCount = currentCount + amount;
-                break;
-            case "remove":
-                newCount = currentCount - amount;
-                if (newCount < 0) newCount = 0;
-                break;
-            case "set":
-                newCount = amount;
-                break;
-            default:
-                showUsage(sender);
-                return true;
+            case "add": newCount += amount; break;
+            case "remove": newCount = Math.max(0, currentCount - amount); break;
+            case "set": newCount = amount; break;
+            default: sendUsage(sender); return true;
         }
 
         SuspiciousManager.getSuspiciousCounts().put(target.getUniqueId(), newCount);
+        sender.sendMessage(Component.text("Updated " + targetName + "'s points to " + newCount).color(NamedTextColor.GREEN));
 
-        if (plugin.getConfigManager().isWebhookAlertEnabled("staff_actions")) {
-            String adminName = sender.getName();
-            if (!(sender instanceof Player)) {
-                adminName = "Console";
-            }
-
-            String actionDescription;
-            switch (action) {
-                case "add":
-                    actionDescription = "Added " + amount + " suspicious points to " + target.getName();
-                    break;
-                case "remove":
-                    actionDescription = "Removed " + amount + " suspicious points from " + target.getName();
-                    break;
-                case "set":
-                    actionDescription = "Set " + target.getName() + "'s suspicious points to " + amount;
-                    break;
-                default:
-                    actionDescription = "Modified " + target.getName() + "'s suspicious points";
-            }
-
-            String details = "Previous: " + currentCount + " в†’ New: " + newCount;
-
-            plugin.getWebhookManager().sendStaffActionLog(adminName, actionDescription, details);
-        }
-
-        sender.sendMessage(Component.text("Updated " + target.getName() + "'s suspicious points from " + currentCount + " to " + newCount + ".").color(NamedTextColor.GREEN));
         return true;
     }
 
-    private void showUsage(CommandSender sender) {
-        sender.sendMessage(Component.text("Usage:").color(NamedTextColor.RED));
-        sender.sendMessage(Component.text("/OverWatch points add <player> <amount>").color(NamedTextColor.RED));
-        sender.sendMessage(Component.text("/OverWatch points remove <player> <amount>").color(NamedTextColor.RED));
-        sender.sendMessage(Component.text("/OverWatch points set <player> <amount>").color(NamedTextColor.RED));
-        sender.sendMessage(Component.text("/OverWatch points check <player>").color(NamedTextColor.RED));
+    @Override
+    public @Nullable List<String> tabComplete(@NotNull CommandSender sender, @NotNull String[] args) {
+        if (args.length == 1) {
+            String partial = args[0].toLowerCase();
+            List<String> completions = new ArrayList<>();
+            for (String s : Arrays.asList("add", "remove", "set", "check")) {
+                if (s.startsWith(partial)) completions.add(s);
+            }
+            return completions;
+        } else if (args.length == 2) {
+            String partial = args[1].toLowerCase();
+            List<String> completions = new ArrayList<>();
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (p.getName().toLowerCase().startsWith(partial)) completions.add(p.getName());
+            }
+            return completions;
+        }
+        return Collections.emptyList();
     }
 }

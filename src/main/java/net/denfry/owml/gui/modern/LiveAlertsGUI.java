@@ -44,9 +44,9 @@ public class LiveAlertsGUI implements OverWatchGUI {
     public void refresh(Player player) {
         inventory.clear();
         List<StaffAlertManager.AlertRecord> allAlerts = new ArrayList<>(plugin.getStaffAlertManager().getAlertHistory());
-        Collections.reverse(allAlerts); // Сначала новые
+        Collections.reverse(allAlerts); // Newest first
 
-        // Фильтрация
+        // Filter
         List<StaffAlertManager.AlertRecord> filteredAlerts = allAlerts.stream().filter(alert -> {
             if (typeFilter == AlertTypeFilter.ALL) return true;
             String msg = alert.getMessage().toLowerCase();
@@ -64,12 +64,17 @@ public class LiveAlertsGUI implements OverWatchGUI {
             Material mat = alert.getMessage().toLowerCase().contains("critical") ? Material.RED_CONCRETE :
                           (alert.getMessage().toLowerCase().contains("suspicious") ? Material.YELLOW_CONCRETE : Material.BLUE_CONCRETE);
 
+            String locationStr = "Unknown";
+            if (alert.getLocation() != null) {
+                locationStr = alert.getLocation().getBlockX() + ", " + alert.getLocation().getBlockY() + ", " + alert.getLocation().getBlockZ();
+            }
+
             inventory.setItem(i, ItemBuilder.material(mat)
                     .name("§e" + alert.getPlayerName() + " §7- " + alert.getMessage())
                     .lore(List.of(
                             "§7Time: §f" + timeFormat.format(alert.getTimestamp()),
-                            "§7Location: §f" + alert.getLocation().getBlockX() + ", " + alert.getLocation().getBlockY() + ", " + alert.getLocation().getBlockZ(),
-                            "§7Confidence: §d85%", // Simulation
+                            "§7Location: §f" + locationStr,
+                            "§7Confidence: §d85%",
                             "",
                             "§eLeft-Click: §7View Profile",
                             "§eRight-Click: §7Mark Read (Dismiss)",
@@ -77,7 +82,7 @@ public class LiveAlertsGUI implements OverWatchGUI {
                     )).build());
         }
 
-        // --- Верхняя строка (Фильтры) ---
+        // --- Top row (Filters) ---
         inventory.setItem(45, ItemBuilder.material(Material.HOPPER)
                 .name("§bFilter: §f" + typeFilter)
                 .build());
@@ -96,7 +101,7 @@ public class LiveAlertsGUI implements OverWatchGUI {
                 .name("§6Export Today's Log")
                 .build());
 
-        // Навигация
+        // Navigation
         if (currentPage > 0) inventory.setItem(51, ItemBuilder.material(Material.ARROW).name("§7Prev").build());
         inventory.setItem(52, ItemBuilder.material(Material.PAPER).name("§fPage " + (currentPage + 1)).build());
         if (currentPage < totalPages - 1) inventory.setItem(53, ItemBuilder.material(Material.ARROW).name("§7Next").build());
@@ -122,7 +127,9 @@ public class LiveAlertsGUI implements OverWatchGUI {
                 refresh(player);
                 GUIEffects.playOpen(player);
             } else if (event.isShiftClick()) {
-                player.teleport(alert.getLocation());
+                if (alert.getLocation() != null) {
+                    player.teleport(alert.getLocation());
+                }
                 dismissAlert(alert);
                 player.sendMessage("§aTeleported to alert location and dismissed.");
                 player.closeInventory();
@@ -143,13 +150,21 @@ public class LiveAlertsGUI implements OverWatchGUI {
                     GUIEffects.playSuccess(player);
                 }
                 break;
-            case 51: if (currentPage > 0) { currentPage--; refresh(player); } break;
-            case 53: currentPage++; refresh(player); break; // simple logic for demo
+            case 51:
+                if (currentPage > 0) {
+                    currentPage--;
+                    refresh(player);
+                }
+                break;
+            case 53:
+                currentPage++;
+                refresh(player);
+                break;
         }
     }
 
     private void dismissAlert(StaffAlertManager.AlertRecord alert) {
-        plugin.getStaffAlertManager().getAlertHistory().remove(alert);
+        plugin.getStaffAlertManager().getAlertHistory().removeIf(a -> a.equals(alert));
     }
 
     @Override

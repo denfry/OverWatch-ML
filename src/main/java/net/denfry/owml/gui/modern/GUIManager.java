@@ -11,15 +11,15 @@ import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.inventory.Inventory;
 
 /**
- * Менеджер GUI, отвечающий за обработку событий и автообновление.
+ * GUI Manager responsible for handling events and auto-refresh.
  */
 public class GUIManager implements Listener {
     private final OverWatchML plugin;
 
     public GUIManager(OverWatchML plugin) {
         this.plugin = plugin;
-        
-        // Задача на автообновление раз в 5 секунд
+
+        // Auto-refresh task every 5 seconds
         Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             for (Player player : Bukkit.getOnlinePlayers()) {
                 Inventory topInv = player.getOpenInventory().getTopInventory();
@@ -44,12 +44,8 @@ public class GUIManager implements Listener {
     public void onInventoryClose(InventoryCloseEvent event) {
         if (event.getInventory().getHolder() instanceof OverWatchGUI) {
             Player player = (Player) event.getPlayer();
-            // Очищаем стек только если закрыли вручную (не через переход в другой GUI нашей системы)
-            // В данной реализации мы полагаемся на то, что переход в другой GUI вызывает open(), 
-            // который закроет текущий инвентарь, но мы можем проверять, открыт ли новый GUI OverWatch.
-            
-            // Для упрощения согласно ТЗ: "очищает стек если игрок закрыл GUI нажатием Escape"
-            // Мы проверим это через небольшую задержку: если через 1 тик у игрока не открыт наш GUI, очищаем.
+            // Clear stack only if GUI was manually closed (not by navigating to another GUI in our system)
+            // We check after a small delay if the player has another OverWatch GUI open
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 if (!(player.getOpenInventory().getTopInventory().getHolder() instanceof OverWatchGUI)) {
                     GUINavigationStack.clear(player);

@@ -27,7 +27,8 @@ public class CheatListener implements Listener {
     }
 
     private boolean shouldSkip(Player player) {
-        return player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR;
+        if (player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR) return true;
+        return player.hasPermission("owml.bypass");
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -35,10 +36,10 @@ public class CheatListener implements Listener {
         Player player = event.getPlayer();
         if (event.getTo() == null || shouldSkip(player)) return;
         
-        // Record event
+        // Record event with ground status in context
         context.getProfileManager().getEventBuffer(player.getUniqueId())
             .addEvent(new net.denfry.owml.detection.PlayerEventBuffer.BehavioralEvent(
-                System.currentTimeMillis(), "move", 1.0, event.getTo().toVector()));
+                System.currentTimeMillis(), "move", 1.0, player.isOnGround()));
 
         // Basic movement check trigger
         context.getDetectionOrchestrator().runDetection(player, CheatCategory.MOVEMENT);

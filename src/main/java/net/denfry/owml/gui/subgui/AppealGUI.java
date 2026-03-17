@@ -1,250 +1,90 @@
 package net.denfry.owml.gui.subgui;
 
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.format.TextDecoration;
-import org.bukkit.Bukkit;
-import org.bukkit.Material;
-import org.bukkit.Sound;
-import org.bukkit.enchantments.Enchantment;
-import org.bukkit.entity.Player;
-import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.ItemFlag;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.inventory.meta.SkullMeta;
 import net.denfry.owml.OverWatchML;
+import net.denfry.owml.gui.modern.GUIEffects;
+import net.denfry.owml.gui.modern.GUINavigationStack;
+import net.denfry.owml.gui.modern.ItemBuilder;
+import net.denfry.owml.gui.modern.OverWatchGUI;
 import net.denfry.owml.managers.AppealManager;
 import net.denfry.owml.managers.AppealManager.Appeal;
+import org.bukkit.Bukkit;
+import org.bukkit.Material;
+import org.bukkit.entity.Player;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.inventory.Inventory;
 
-import java.util.*;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
-public class AppealGUI {
-    private static final int PAGE_SIZE = 36;
-    private static final int ITEMS_PER_ROW = 9;
-    private final Inventory inv;
+public class AppealGUI implements OverWatchGUI {
     private final OverWatchML plugin;
     private final AppealManager appealManager;
+    private final Inventory inventory;
     private final Map<Integer, Appeal> appealSlots = new HashMap<>();
-    private final int page;
-    private final int maxPage;
+    private int page = 0;
 
-    public AppealGUI(OverWatchML plugin, AppealManager appealManager, int page) {
+    public AppealGUI(OverWatchML plugin) {
         this.plugin = plugin;
-        this.appealManager = appealManager;
-        this.page = Math.max(0, page);
-
-
-        List<Appeal> pendingAppeals = appealManager.getPendingAppeals();
-
-
-        this.maxPage = (int) Math.ceil((double) pendingAppeals.size() / PAGE_SIZE);
-
-
-        inv = Bukkit.createInventory(null, 54, Component.text("рџ“‹ OverWatchML Appeal System").color(NamedTextColor.GOLD).decoration(TextDecoration.BOLD, true));
-
-
-        initializeItems(pendingAppeals);
+        this.appealManager = plugin.getAppealManager();
+        this.inventory = Bukkit.createInventory(this, 54, "⚖ Player Appeals");
     }
 
-    /**
-     * Handle click events in the appeal list GUI
-     */
-    public static boolean handleClick(Player player, int slot, Inventory inventory, OverWatchML plugin, AppealManager appealManager) {
-
-        AppealGUI gui = getGuiFromInventory(inventory, plugin, appealManager);
-        if (gui == null) return false;
-
-
-        if (slot == 48 || slot == 49) {
-            player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, 0.5f, 1.0f);
-            player.closeInventory();
-
-            net.denfry.owml.gui.StaffMenuGUI staffMenu = new net.denfry.owml.gui.StaffMenuGUI();
-            staffMenu.openInventory(player);
-            return true;
-        }
-
-
-        if (slot == 45 && gui.page > 0) {
-            player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, 0.5f, 1.0f);
-            new AppealGUI(plugin, appealManager, gui.page - 1).openInventory(player);
-            return true;
-        }
-
-
-        if (slot == 53 && gui.page < gui.maxPage - 1) {
-            player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, 0.5f, 1.0f);
-            new AppealGUI(plugin, appealManager, gui.page + 1).openInventory(player);
-            return true;
-        }
-
-
-        if (gui.appealSlots.containsKey(slot)) {
-            Appeal appeal = gui.appealSlots.get(slot);
-            player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, 0.5f, 1.0f);
-            new AppealDetailsGUI(plugin, appealManager, appeal).openInventory(player);
-            return true;
-        }
-
-        return false;
+    @Override
+    public void open(Player player) {
+        refresh(player);
+        player.openInventory(inventory);
+        GUIEffects.playOpen(player);
     }
 
-    /**
-     * Get the AppealGUI instance from an inventory
-     */
-    private static AppealGUI getGuiFromInventory(Inventory inventory, OverWatchML plugin, AppealManager appealManager) {
+    @Override
+    public void close(Player player) {}
 
-        if (inventory.getViewers().isEmpty()) return null;
+    @Override
+    public void refresh(Player player) {
+        inventory.clear();
+        appealSlots.clear();
+        
+        List<Appeal> pending = appealManager.getPendingAppeals();
+        pending.sort(Comparator.comparing(Appeal::getTimestamp).reversed());
 
-        String titleStr = inventory.getViewers().get(0).getOpenInventory().title().toString();
-        if (titleStr == null) return null;
-
-        if (titleStr.contains("Appeal System")) {
-
-
-            return new AppealGUI(plugin, appealManager, 0);
+        int start = page * 45;
+        for (int i = 0; i < Math.min(45, pending.size() - start); i++) {
+            Appeal appeal = pending.get(start + i);
+            inventory.setItem(i, ItemBuilder.material(Material.PLAYER_HEAD)
+                    .skull(appeal.getPlayerName())
+                    .name("§6Appeal: §e" + appeal.getPlayerName())
+                    .lore(List.of(
+                            "§7Level: §c" + appeal.getPunishmentLevel(),
+                            "§7Date: §f" + appeal.getFormattedTimestamp(),
+                            "",
+                            "§eClick to review"
+                    ))
+                    .build());
+            appealSlots.put(i, appeal);
         }
 
-        return null;
+        inventory.setItem(49, ItemBuilder.material(Material.BARRIER).name("§cBack").build());
     }
 
-    private void initializeItems(List<Appeal> appeals) {
+    @Override
+    public void handleClick(InventoryClickEvent event) {
+        Player player = (Player) event.getWhoClicked();
+        int slot = event.getSlot();
 
-        appeals.sort(Comparator.comparing(Appeal::getTimestamp).reversed());
-
-
-        int startIndex = page * PAGE_SIZE;
-        int endIndex = Math.min(startIndex + PAGE_SIZE, appeals.size());
-
-        for (int i = startIndex; i < endIndex; i++) {
-            Appeal appeal = appeals.get(i);
-            int slot = (i - startIndex) % PAGE_SIZE;
-
-
-            ItemStack item = createAppealItem(appeal);
-            inv.setItem(slot, item);
-            appealSlots.put(slot, appeal);
-        }
-
-
-        if (maxPage > 1) {
-
-            if (page > 0) {
-                ItemStack prevItem = createGuiItem(Material.ARROW, Component.text("в—Ђ Previous Page").color(NamedTextColor.YELLOW), false, Component.text("Go to page " + page).color(NamedTextColor.GRAY));
-                inv.setItem(45, prevItem);
+        if (slot < 45) {
+            Appeal appeal = appealSlots.get(slot);
+            if (appeal != null) {
+                GUINavigationStack.push(player, new AppealDetailsGUI(plugin, appealManager, appeal));
             }
-
-
-            if (page < maxPage - 1) {
-                ItemStack nextItem = createGuiItem(Material.ARROW, Component.text("Next Page в–¶").color(NamedTextColor.YELLOW), false, Component.text("Go to page " + (page + 2)).color(NamedTextColor.GRAY));
-                inv.setItem(53, nextItem);
-            }
-
-
-            ItemStack pageItem = createGuiItem(Material.PAPER, Component.text("Page " + (page + 1) + "/" + maxPage).color(NamedTextColor.GOLD), false);
-            inv.setItem(49, pageItem);
+        } else if (slot == 49) {
+            GUINavigationStack.pop(player);
         }
-
-
-        ItemStack backItem = createGuiItem(Material.BARRIER, Component.text("в†© Back to Staff Menu").color(NamedTextColor.RED), false);
-        inv.setItem(maxPage > 1 ? 48 : 49, backItem);
-
-
-        ItemStack countItem = createGuiItem(Material.BOOK, Component.text(appeals.size() + " Pending Appeals").color(NamedTextColor.AQUA), false);
-        inv.setItem(maxPage > 1 ? 50 : 51, countItem);
     }
 
-    private ItemStack createAppealItem(Appeal appeal) {
-        Material material;
-        switch (appeal.getPunishmentLevel()) {
-            case 1:
-                material = Material.YELLOW_WOOL;
-                break;
-            case 2:
-                material = Material.ORANGE_WOOL;
-                break;
-            case 3:
-                material = Material.RED_WOOL;
-                break;
-            case 4:
-                material = Material.PURPLE_WOOL;
-                break;
-            case 5:
-                material = Material.MAGENTA_WOOL;
-                break;
-            case 6:
-                material = Material.BLACK_WOOL;
-                break;
-            default:
-                material = Material.WHITE_WOOL;
-        }
-
-
-        ItemStack item = new ItemStack(Material.PLAYER_HEAD);
-
-
-        SkullMeta meta = (SkullMeta) item.getItemMeta();
-
-
-        Player player = Bukkit.getPlayer(appeal.getPlayerId());
-        if (player != null) {
-            meta.setOwningPlayer(player);
-        } else {
-
-            meta.setOwningPlayer(Bukkit.getOfflinePlayer(appeal.getPlayerId()));
-        }
-
-
-        meta.setDisplayName("В§6Appeal #" + appeal.getId() + ": В§e" + appeal.getPlayerName());
-
-
-        List<Component> lore = new ArrayList<>();
-        lore.add(Component.text("Level " + appeal.getPunishmentLevel() + " Punishment").color(NamedTextColor.RED));
-        lore.add(Component.text("Submitted: " + appeal.getFormattedTimestamp()).color(NamedTextColor.GRAY));
-        lore.add(Component.empty());
-
-
-        String reasonPreview = appeal.getReason().length() > 30 ? appeal.getReason().substring(0, 27) + "..." : appeal.getReason();
-        lore.add(Component.text("Reason: ").color(NamedTextColor.WHITE).append(Component.text(reasonPreview).color(NamedTextColor.YELLOW)));
-
-        lore.add(Component.empty());
-        lore.add(Component.text("В» Click to view details").color(NamedTextColor.GREEN));
-
-        meta.lore(lore);
-
-
-        meta.addEnchant(Enchantment.MENDING, 1, true);
-        meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
-        meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
-
-        item.setItemMeta(meta);
-        return item;
-    }
-
-    private ItemStack createGuiItem(Material material, Component name, boolean enchanted, Component... lore) {
-        ItemStack item = new ItemStack(material);
-        ItemMeta meta = item.getItemMeta();
-        meta.displayName(name);
-
-        if (lore.length > 0) {
-            List<Component> loreList = new ArrayList<>();
-            Collections.addAll(loreList, lore);
-            meta.lore(loreList);
-        }
-
-        if (enchanted) {
-            meta.addEnchant(Enchantment.MENDING, 1, true);
-            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
-        }
-
-        meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
-        item.setItemMeta(meta);
-        return item;
-    }
-
-    public void openInventory(Player player) {
-        player.openInventory(inv);
-        player.playSound(player.getLocation(), Sound.BLOCK_ENCHANTMENT_TABLE_USE, 0.5f, 1.2f);
+    @Override
+    public Inventory getInventory() {
+        return inventory;
     }
 }

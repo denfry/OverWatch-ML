@@ -450,6 +450,27 @@ public class ConfigManager {
         return staffAlertEnabled;
     }
 
+    public void setDecoyEnabled(boolean enabled) {
+        this.decoyEnabled = enabled;
+        this.cachedDecoyEnabled.set(enabled);
+        plugin.getConfig().set("decoy.enabled", enabled);
+        plugin.saveConfig();
+    }
+
+    public void setStaffOreAlerts(boolean enabled) {
+        this.staffOreAlerts = enabled;
+        this.cachedStaffOreAlerts.set(enabled);
+        plugin.getConfig().set("staff.oreAlerts", enabled);
+        plugin.saveConfig();
+    }
+
+    public void setStaffAlertEnabled(boolean enabled) {
+        this.staffAlertEnabled = enabled;
+        this.cachedStaffAlertEnabled.set(enabled);
+        plugin.getConfig().set("staff.alertEnabled", enabled);
+        plugin.saveConfig();
+    }
+
     public Set<Material> getNaturalOres() {
         return naturalOres;
     }

@@ -544,31 +544,27 @@ public class MLDataManager {
 
             if (url.getProtocol().equals("jar")) {
                 String jarPath = url.getPath().substring(5, url.getPath().indexOf("!"));
-                java.util.jar.JarFile jar = new java.util.jar.JarFile(java.net.URLDecoder.decode(jarPath, StandardCharsets.UTF_8));
-
-                java.util.Enumeration<java.util.jar.JarEntry> entries = jar.entries();
-                String pathToMatch = resourcePath + "/";
                 int extractedCount = 0;
+                try (java.util.jar.JarFile jar = new java.util.jar.JarFile(java.net.URLDecoder.decode(jarPath, StandardCharsets.UTF_8))) {
+                    java.util.Enumeration<java.util.jar.JarEntry> entries = jar.entries();
+                    String pathToMatch = resourcePath + "/";
 
+                    while (entries.hasMoreElements()) {
+                        java.util.jar.JarEntry entry = entries.nextElement();
+                        String name = entry.getName();
 
-                while (entries.hasMoreElements()) {
-                    java.util.jar.JarEntry entry = entries.nextElement();
-                    String name = entry.getName();
-
-                    if (name.startsWith(pathToMatch) && !entry.isDirectory() && name.endsWith(".json")) {
-                        String filename = name.substring(pathToMatch.length());
-                        java.io.InputStream is = plugin.getClass().getClassLoader().getResourceAsStream(name);
-                        if (is != null) {
-
-                            File outFile = new File(trainingDir, filename);
-                            java.nio.file.Files.copy(is, outFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                            extractedCount++;
-                            is.close();
+                        if (name.startsWith(pathToMatch) && !entry.isDirectory() && name.endsWith(".json")) {
+                            String filename = name.substring(pathToMatch.length());
+                            java.io.InputStream is = plugin.getClass().getClassLoader().getResourceAsStream(name);
+                            if (is != null) {
+                                File outFile = new File(trainingDir, filename);
+                                java.nio.file.Files.copy(is, outFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                                extractedCount++;
+                                is.close();
+                            }
                         }
                     }
                 }
-
-                jar.close();
                 plugin.getLogger().info("Extracted " + extractedCount + " training files from plugin JAR");
             }
         } catch (Exception e) {

@@ -161,6 +161,8 @@ public class SuspiciousPlayersGUI implements OverWatchGUI {
     public void handleClick(InventoryClickEvent event) {
         Player player = (Player) event.getWhoClicked();
         int slot = event.getSlot();
+        
+        String actionName = "Unknown";
 
         if (slot < 45) {
             // Клик по игроку
@@ -169,17 +171,24 @@ public class SuspiciousPlayersGUI implements OverWatchGUI {
             List<UUID> players = new ArrayList<>(service.getSuspiciousPlayers()); // В реальности нужно хранить отфильтрованный список
             if (index >= players.size()) return;
             UUID targetId = players.get(index);
+            OfflinePlayer target = Bukkit.getOfflinePlayer(targetId);
 
             if (event.isShiftClick()) {
-                OfflinePlayer target = Bukkit.getOfflinePlayer(targetId);
+                actionName = "Teleport to " + target.getName();
                 if (target.isOnline()) {
                     player.teleport(target.getPlayer());
                     player.sendMessage("§aTeleported to " + target.getName());
                 }
             } else if (event.isLeftClick()) {
+                actionName = "Open Profile for " + target.getName();
                 GUINavigationStack.push(player, new PlayerProfileGUI(plugin, targetId));
             } else if (event.isRightClick()) {
+                actionName = "Open Quick Actions for " + target.getName();
                 openQuickActionMenu(player, targetId);
+            }
+            
+            if (!actionName.equals("Unknown")) {
+                plugin.getLogger().info("GUI: " + player.getName() + " -> " + actionName);
             }
             return;
         }
@@ -187,21 +196,26 @@ public class SuspiciousPlayersGUI implements OverWatchGUI {
         switch (slot) {
             case 45:
                 if (event.isShiftClick()) {
+                    actionName = "Go Back";
                     GUINavigationStack.pop(player);
                 } else {
                     typeFilter = TypeFilter.values()[(typeFilter.ordinal() + 1) % TypeFilter.values().length];
+                    actionName = "Cycle Type Filter: " + typeFilter;
                     refresh(player);
                 }
                 break;
             case 46:
                 statusFilter = StatusFilter.values()[(statusFilter.ordinal() + 1) % StatusFilter.values().length];
+                actionName = "Cycle Status Filter: " + statusFilter;
                 refresh(player);
                 break;
             case 47:
                 sortType = SortType.values()[(sortType.ordinal() + 1) % SortType.values().length];
+                actionName = "Cycle Sort Type: " + sortType;
                 refresh(player);
                 break;
             case 49:
+                actionName = "Open Search Prompt";
                 player.closeInventory();
                 GUIEffects.showChatPrompt(player, "Enter player name to search (or 'cancel' to reset):", 30).thenAccept(name -> {
                     Bukkit.getScheduler().runTask(plugin, () -> {
@@ -214,14 +228,19 @@ public class SuspiciousPlayersGUI implements OverWatchGUI {
             case 51:
                 if (currentPage > 0) {
                     currentPage--;
+                    actionName = "Previous Page (" + (currentPage + 1) + ")";
                     refresh(player);
                 }
                 break;
             case 53:
-                // Здесь нужна проверка на макс страницы, для простоты refresh сделает это
                 currentPage++;
+                actionName = "Next Page (" + (currentPage + 1) + ")";
                 refresh(player);
                 break;
+        }
+        
+        if (!actionName.equals("Unknown")) {
+            plugin.getLogger().info("GUI: " + player.getName() + " -> " + actionName);
         }
     }
 

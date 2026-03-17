@@ -100,12 +100,18 @@ public class DetectionOrchestrator {
         
         // Example: Update movement speed
         if (category == CheatCategory.MOVEMENT) {
-            // Very simplified: just count move events in last second as a proxy for frequency
             long now = System.currentTimeMillis();
             long count = events.stream()
                 .filter(e -> e.eventType().equals("move") && (now - e.timestamp()) < 1000)
                 .count();
             profile.setMetric("movement_speed", count / 20.0); // Assuming 20 tps move events
+
+            // Update in_air_time
+            long inAirCount = events.stream()
+                .filter(e -> e.eventType().equals("move") && (now - e.timestamp()) < 1000)
+                .filter(e -> e.context() instanceof Boolean && !(Boolean) e.context()) // isOnGround = false
+                .count();
+            profile.setMetric("in_air_time", (double) inAirCount / Math.max(1, count));
         }
     }
 

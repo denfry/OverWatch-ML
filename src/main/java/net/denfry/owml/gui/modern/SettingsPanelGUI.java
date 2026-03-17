@@ -118,59 +118,117 @@ public class SettingsPanelGUI implements OverWatchGUI {
     public void handleClick(InventoryClickEvent event) {
         Player player = (Player) event.getWhoClicked();
         int slot = event.getSlot();
+        
+        String actionName = "Unknown";
 
         switch (slot) {
             case 10: // Warning Threshold
+                actionName = "Adjust Warning Threshold";
                 if (event.isShiftClick()) warningThreshold = 60;
                 else if (event.isLeftClick()) warningThreshold = Math.max(0, warningThreshold - 5);
                 else if (event.isRightClick()) warningThreshold = Math.min(100, warningThreshold + 5);
                 break;
             case 11: // Auto-Punish Threshold
+                actionName = "Adjust Auto-Punish Threshold";
                 if (event.isShiftClick()) autoPunishThreshold = 90;
                 else if (event.isLeftClick()) autoPunishThreshold = Math.max(0, autoPunishThreshold - 5);
                 else if (event.isRightClick()) autoPunishThreshold = Math.min(100, autoPunishThreshold + 5);
                 break;
             case 12: // Min Data Points
+                actionName = "Adjust Min Data Points";
                 if (event.isLeftClick()) minDataPoints = Math.max(10, minDataPoints - 10);
                 else if (event.isRightClick()) minDataPoints = Math.min(500, minDataPoints + 10);
                 break;
             case 19: // Toggle Auto-Punish
+                actionName = "Toggle Auto-Punish";
                 autoPunishEnabled = !autoPunishEnabled;
                 break;
             case 20: // Cycle Punish Type
+                actionName = "Cycle Punish Type";
                 List<String> types = List.of("KICK", "TEMPBAN_1H", "TEMPBAN_24H", "BAN");
                 int idx = (types.indexOf(autoPunishType) + 1) % types.size();
                 autoPunishType = types.get(idx);
                 break;
             case 21: // Discord
+                actionName = "Toggle Discord Alerts";
                 discordAlerts = !discordAlerts;
                 break;
             case 28: // Interval
+                actionName = "Adjust Analysis Interval";
                 if (event.isLeftClick()) analysisInterval = Math.max(20, analysisInterval - 20);
                 else if (event.isRightClick()) analysisInterval = Math.min(1200, analysisInterval + 20);
                 break;
             case 29: // Queue
+                actionName = "Adjust Max Queue Size";
                 if (event.isLeftClick()) maxQueueSize = Math.max(1, maxQueueSize - 1);
                 else if (event.isRightClick()) maxQueueSize = Math.min(50, maxQueueSize + 1);
                 break;
             case 45: // Reset
+                actionName = "Reset Settings to Default";
                 GUIEffects.showConfirmDialog(player, "Reset to defaults?", () -> {
-                    loadCurrentSettings(); // For prototype, just reload from file
+                    loadCurrentSettings(); 
                     refresh(player);
+                    plugin.getLogger().info("GUI: " + player.getName() + " reset settings to defaults.");
                 });
                 return;
             case 49: // Save
+                actionName = "Save Settings";
                 saveSettings(player);
+                plugin.getLogger().info("GUI: " + player.getName() + " saved new configuration settings.");
                 return;
             case 53: // Cancel
+                actionName = "Cancel Changes";
                 GUINavigationStack.pop(player);
-                return;
+                break;
         }
+        
+        if (!actionName.equals("Unknown")) {
+            plugin.getLogger().info("GUI: " + player.getName() + " -> " + actionName);
+        }
+        
         refresh(player);
         GUIEffects.playOpen(player);
     }
 
     private void saveSettings(Player player) {
+        // Validate settings before saving
+        if (warningThreshold < 0 || warningThreshold > 100) {
+            player.sendMessage("§cWarning threshold must be between 0 and 100!");
+            GUIEffects.playError(player);
+            return;
+        }
+
+        if (autoPunishThreshold < 0 || autoPunishThreshold > 100) {
+            player.sendMessage("§cAuto-punish threshold must be between 0 and 100!");
+            GUIEffects.playError(player);
+            return;
+        }
+
+        if (minDataPoints < 10 || minDataPoints > 1000) {
+            player.sendMessage("§cMin data points must be between 10 and 1000!");
+            GUIEffects.playError(player);
+            return;
+        }
+
+        if (analysisInterval < 20 || analysisInterval > 1200) {
+            player.sendMessage("§cAnalysis interval must be between 20 and 1200 ticks!");
+            GUIEffects.playError(player);
+            return;
+        }
+
+        if (maxQueueSize < 1 || maxQueueSize > 50) {
+            player.sendMessage("§cMax queue size must be between 1 and 50!");
+            GUIEffects.playError(player);
+            return;
+        }
+
+        // Validate auto-punish type
+        List<String> validTypes = List.of("KICK", "TEMPBAN_1H", "TEMPBAN_24H", "BAN");
+        if (!validTypes.contains(autoPunishType)) {
+            player.sendMessage("§cInvalid auto-punish type! Resetting to KICK.");
+            autoPunishType = "KICK";
+        }
+
         plugin.getConfig().set("ml.thresholds.warning", warningThreshold);
         plugin.getConfig().set("ml.thresholds.auto-punish", autoPunishThreshold);
         plugin.getConfig().set("ml.min-data-points", minDataPoints);
@@ -180,7 +238,7 @@ public class SettingsPanelGUI implements OverWatchGUI {
         plugin.getConfig().set("performance.analysis-interval", analysisInterval);
         plugin.getConfig().set("performance.max-queue", maxQueueSize);
         plugin.saveConfig();
-        
+
         player.sendMessage("§aSettings saved successfully!");
         GUIEffects.playSuccess(player);
         player.closeInventory();

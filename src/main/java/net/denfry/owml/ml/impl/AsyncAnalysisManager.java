@@ -129,14 +129,7 @@ public class AsyncAnalysisManager implements AnalysisManager {
         activeAnalyses.put(playerId, endTime);
 
         // Automatically stop analysis after specified time
-        executor.runOnMainThread(() -> {
-            try {
-                Thread.sleep(durationInSeconds * 1000L);
-                stopAnalysis(playerId);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        });
+        executor.runTaskLater(() -> stopAnalysis(playerId), durationInSeconds * 20L);
     }
 
     @Override

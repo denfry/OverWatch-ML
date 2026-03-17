@@ -32,7 +32,7 @@ public class ItemBuilder {
 
     public ItemBuilder name(String name) {
         if (meta != null) {
-            meta.displayName(TextUtils.colorize(name).decoration(org.bukkit.event.inventory.InventoryType.class != null ? net.kyori.adventure.text.format.TextDecoration.ITALIC : null, false));
+            meta.displayName(TextUtils.colorize(name).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false));
         }
         return this;
     }

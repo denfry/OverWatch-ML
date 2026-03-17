@@ -91,6 +91,10 @@ public class BehavioralAnalyzer implements DetectionAnalyzer {
             Location prev = locationList.get(i - 1);
             Location curr = locationList.get(i);
 
+            if (prev.getWorld() == null || curr.getWorld() == null || !prev.getWorld().equals(curr.getWorld())) {
+                continue;
+            }
+
             double distance = prev.distance(curr);
             totalDistance += distance;
 

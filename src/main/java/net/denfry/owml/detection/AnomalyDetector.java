@@ -114,7 +114,11 @@ public class AnomalyDetector implements DetectionAnalyzer {
      * Analyze movement pattern anomalies
      */
     private double analyzeMovementAnomaly(PlayerDetectionData data, DetectionContext context) {
-        if (context.getFromLocation() == null || context.getLocation() == null) return 0.0;
+        if (context.getFromLocation() == null || context.getLocation() == null ||
+            context.getFromLocation().getWorld() == null || context.getLocation().getWorld() == null ||
+            !context.getFromLocation().getWorld().equals(context.getLocation().getWorld())) {
+            return 0.0;
+        }
 
         double distance = context.getFromLocation().distance(context.getLocation());
         double timeDiff = 0.05; // Assume 1 tick (50ms) between location updates

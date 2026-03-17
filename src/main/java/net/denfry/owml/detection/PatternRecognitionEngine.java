@@ -274,7 +274,8 @@ public class PatternRecognitionEngine implements DetectionAnalyzer {
         int totalBlocks = 0;
 
         for (Location loc : recentLocations) {
-            if (loc.distance(currentLocation) <= 10.0) {
+            if (loc != null && loc.getWorld() != null && currentLocation != null && currentLocation.getWorld() != null &&
+                loc.getWorld().equals(currentLocation.getWorld()) && loc.distance(currentLocation) <= 10.0) {
                 // In a real implementation, you'd check the actual block type
                 // For now, assume some locations contain the same ore type
                 oreCount++;

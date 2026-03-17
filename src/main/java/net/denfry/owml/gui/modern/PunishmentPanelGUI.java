@@ -10,6 +10,10 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -19,19 +23,24 @@ public class PunishmentPanelGUI implements OverWatchGUI {
     private final Inventory inventory;
     private UUID selectedPlayerId = null;
     private final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss");
+    private final Path historyFile;
 
-    // Static history for prototype
-    private static final List<PunishmentRecord> history = new ArrayList<>();
+    // In-memory history loaded from file
+    private List<PunishmentRecord> history;
 
     public PunishmentPanelGUI(OverWatchML plugin) {
         this.plugin = plugin;
         this.inventory = Bukkit.createInventory(this, 54, "Punishment Control Panel");
+        this.historyFile = plugin.getDataFolder().toPath().resolve("punishment_history.json");
+        loadHistory();
     }
 
     public PunishmentPanelGUI(OverWatchML plugin, UUID targetId) {
         this.plugin = plugin;
         this.selectedPlayerId = targetId;
         this.inventory = Bukkit.createInventory(this, 54, "Punishment Control Panel");
+        this.historyFile = plugin.getDataFolder().toPath().resolve("punishment_history.json");
+        loadHistory();
     }
 
     public static class PunishmentRecord {
@@ -44,6 +53,72 @@ public class PunishmentPanelGUI implements OverWatchGUI {
             this.type = type;
             this.timestamp = System.currentTimeMillis();
         }
+    }
+
+    private void loadHistory() {
+        history = new ArrayList<>();
+        if (Files.exists(historyFile)) {
+            try {
+                String content = new String(Files.readAllBytes(historyFile));
+                if (!content.isEmpty()) {
+                    // Simple JSON parsing (in production, use a proper JSON library)
+                    String[] records = content.split("\\},\\{");
+                    for (String record : records) {
+                        try {
+                            String cleaned = record.replace("[", "").replace("]", "").replace("{", "").replace("}", "").trim();
+                            String[] parts = cleaned.split(",");
+                            String playerName = null, type = null;
+                            long timestamp = 0;
+                            for (String part : parts) {
+                                String[] kv = part.split(":");
+                                if (kv.length == 2) {
+                                    String key = kv[0].trim().replace("\"", "");
+                                    String value = kv[1].trim().replace("\"", "");
+                                    if (key.equals("playerName")) playerName = value;
+                                    else if (key.equals("type")) type = value;
+                                    else if (key.equals("timestamp")) timestamp = Long.parseLong(value);
+                                }
+                            }
+                            if (playerName != null && type != null) {
+                                PunishmentRecord rec = new PunishmentRecord(playerName, type);
+                                rec.timestamp = timestamp;
+                                history.add(rec);
+                            }
+                        } catch (Exception e) {
+                            // Skip malformed records
+                        }
+                    }
+                }
+            } catch (IOException e) {
+                plugin.getLogger().warning("Failed to load punishment history: " + e.getMessage());
+            }
+        }
+    }
+
+    private void saveHistory() {
+        try {
+            StringBuilder sb = new StringBuilder("[");
+            for (int i = 0; i < history.size(); i++) {
+                PunishmentRecord rec = history.get(i);
+                sb.append("{\"playerName\":\"").append(rec.playerName)
+                  .append("\",\"type\":\"").append(rec.type)
+                  .append("\",\"timestamp\":").append(rec.timestamp).append("}");
+                if (i < history.size() - 1) sb.append(",");
+            }
+            sb.append("]");
+            Files.writeString(historyFile, sb.toString());
+        } catch (IOException e) {
+            plugin.getLogger().warning("Failed to save punishment history: " + e.getMessage());
+        }
+    }
+
+    private void addHistory(String name, String type) {
+        history.add(new PunishmentRecord(name, type));
+        // Keep only last 50 records
+        if (history.size() > 50) {
+            history.remove(0);
+        }
+        saveHistory();
     }
 
     @Override
@@ -107,11 +182,17 @@ public class PunishmentPanelGUI implements OverWatchGUI {
         inventory.setItem(35, ItemBuilder.material(Material.ARROW).name("§dMute Player").build());
         inventory.setItem(44, ItemBuilder.material(Material.COMMAND_BLOCK_MINECART).name("§fCustom Command").build());
 
-        // --- Bottom Row: History (45-53) ---
-        int historyStartSlot = 45;
-        for (int i = 0; i < Math.min(9, history.size()); i++) {
+        // --- Center Bottom: Appeals (49) ---
+        inventory.setItem(49, ItemBuilder.material(Material.WRITABLE_BOOK)
+                .name("§aReview Appeals")
+                .lore(List.of("§7Manage player punishment appeals."))
+                .build());
+
+        // --- Bottom Row: History (45-48, 50-53) ---
+        int[] historySlots = {45, 46, 47, 48, 50, 51, 52, 53};
+        for (int i = 0; i < Math.min(historySlots.length, history.size()); i++) {
             PunishmentRecord rec = history.get(history.size() - 1 - i);
-            inventory.setItem(historyStartSlot + i, ItemBuilder.material(Material.PAPER)
+            inventory.setItem(historySlots[i], ItemBuilder.material(Material.PAPER)
                     .name("§7" + rec.playerName + " §f- " + rec.type)
                     .lore(List.of("§7Time: §f" + timeFormat.format(rec.timestamp), "§eClick to cancel (if <10m)"))
                     .build());
@@ -122,6 +203,8 @@ public class PunishmentPanelGUI implements OverWatchGUI {
     public void handleClick(InventoryClickEvent event) {
         Player player = (Player) event.getWhoClicked();
         int slot = event.getSlot();
+        
+        String actionName = "Unknown";
 
         // Selection
         if (slot == 0 || slot == 9 || slot == 18 || slot == 27 || slot == 36) {
@@ -132,9 +215,17 @@ public class PunishmentPanelGUI implements OverWatchGUI {
             int index = slot / 9;
             if (index < awaiting.size()) {
                 selectedPlayerId = awaiting.get(index);
+                actionName = "Select Player: " + Bukkit.getOfflinePlayer(selectedPlayerId).getName();
                 refresh(player);
                 GUIEffects.playOpen(player);
             }
+            return;
+        }
+
+        if (slot == 49) {
+            actionName = "Open Appeals GUI";
+            GUINavigationStack.push(player, new net.denfry.owml.gui.subgui.AppealGUI(plugin));
+            plugin.getLogger().info("GUI: " + player.getName() + " -> " + actionName);
             return;
         }
 
@@ -148,24 +239,33 @@ public class PunishmentPanelGUI implements OverWatchGUI {
 
         switch (slot) {
             case 8: // Kick
+                actionName = "Execute KICK on " + target.getName();
                 executePunishment(player, target, "KICK");
                 break;
             case 17: // Temp Ban
+                actionName = "Open Ban Duration Selection for " + target.getName();
                 openDurationSelection(player, target, "BAN");
                 break;
             case 26: // Perm Ban
-                GUIEffects.showConfirmDialog(player, "Ban " + target.getName() + "?", () -> executePunishment(player, target, "PERMANENT BAN"));
+                actionName = "Confirm Perm Ban for " + target.getName();
+                GUIEffects.showConfirmDialog(player, "Ban " + target.getName() + "?", () -> {
+                    executePunishment(player, target, "PERMANENT BAN");
+                    plugin.getLogger().warning("GUI: " + player.getName() + " executed PERMANENT BAN on " + target.getName());
+                });
                 break;
             case 35: // Mute
+                actionName = "Open Mute Duration Selection for " + target.getName();
                 openDurationSelection(player, target, "MUTE");
                 break;
             case 44: // Custom
+                actionName = "Enter Custom Command for " + target.getName();
                 player.closeInventory();
                 GUIEffects.showChatPrompt(player, "Enter command (use %p for name):", 30).thenAccept(cmd -> {
                     if (cmd != null) {
                         Bukkit.getScheduler().runTask(plugin, () -> {
                             Bukkit.dispatchCommand(Bukkit.getConsoleSender(), cmd.replace("%p", target.getName()));
                             addHistory(target.getName(), "CUSTOM");
+                            plugin.getLogger().info("GUI: " + player.getName() + " executed custom command on " + target.getName() + ": " + cmd);
                         });
                     }
                 });
@@ -173,31 +273,38 @@ public class PunishmentPanelGUI implements OverWatchGUI {
         }
 
         // History cancel
-        if (slot >= 45 && slot <= 53) {
-            int hIndex = history.size() - 1 - (slot - 45);
-            if (hIndex >= 0 && hIndex < history.size()) {
-                PunishmentRecord rec = history.get(hIndex);
-                if (System.currentTimeMillis() - rec.timestamp < 600000) { // 10 min
-                    player.sendMessage("§aPunishment for " + rec.playerName + " cancelled.");
-                    history.remove(hIndex);
-                    refresh(player);
-                    GUIEffects.playSuccess(player);
+        int[] historySlots = {45, 46, 47, 48, 50, 51, 52, 53};
+        for (int i = 0; i < historySlots.length; i++) {
+            if (slot == historySlots[i]) {
+                int hIndex = history.size() - 1 - i;
+                if (hIndex >= 0 && hIndex < history.size()) {
+                    PunishmentRecord rec = history.get(hIndex);
+                    if (System.currentTimeMillis() - rec.timestamp < 600000) { // 10 min
+                        actionName = "Cancel Punishment for " + rec.playerName;
+                        player.sendMessage("§aPunishment for " + rec.playerName + " cancelled.");
+                        history.remove(hIndex);
+                        refresh(player);
+                        GUIEffects.playSuccess(player);
+                    }
                 }
             }
+        }
+        
+        if (!actionName.equals("Unknown")) {
+            plugin.getLogger().info("GUI: " + player.getName() + " -> " + actionName);
         }
     }
 
     private void executePunishment(Player staff, OfflinePlayer target, String type) {
+        if (target == null || target.getName() == null) {
+            staff.sendMessage("§cInvalid target for punishment!");
+            return;
+        }
         staff.sendMessage("§aExecuted: " + type + " on " + target.getName());
         addHistory(target.getName(), type);
         selectedPlayerId = null;
         refresh(staff);
         GUIEffects.playSuccess(staff);
-    }
-
-    private void addHistory(String name, String type) {
-        history.add(new PunishmentRecord(name, type));
-        if (history.size() > 9) history.remove(0);
     }
 
     private void openDurationSelection(Player staff, OfflinePlayer target, String baseType) {

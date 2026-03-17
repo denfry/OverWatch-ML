@@ -1,132 +1,68 @@
 package net.denfry.owml.gui.subgui;
 
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.format.TextDecoration;
+import net.denfry.owml.OverWatchML;
+import net.denfry.owml.config.ConfigManager;
+import net.denfry.owml.gui.modern.GUIEffects;
+import net.denfry.owml.gui.modern.GUINavigationStack;
+import net.denfry.owml.gui.modern.ItemBuilder;
+import net.denfry.owml.gui.modern.OverWatchGUI;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
-import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.ItemFlag;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
-import net.denfry.owml.config.ConfigManager;
-import net.denfry.owml.OverWatchML;
-import net.denfry.owml.gui.StaffMenuGUI;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
-public class ConfigSettingsGUI {
-
-    public static final String PERMISSION = "owml.gui_config";
-    private final static String TITLE = "вљ™ Plugin Configuration";
-    private final Inventory inv;
-    private final ConfigManager configManager;
+public class ConfigSettingsGUI implements OverWatchGUI {
     private final OverWatchML plugin;
+    private final ConfigManager configManager;
+    private final Inventory inventory;
 
-    public ConfigSettingsGUI(ConfigManager configManager, OverWatchML plugin) {
-        this.configManager = configManager;
+    public ConfigSettingsGUI(OverWatchML plugin) {
         this.plugin = plugin;
-
-
-        inv = Bukkit.createInventory(null, 27, Component.text(TITLE).color(NamedTextColor.AQUA));
-
-        initializeItems();
+        this.configManager = plugin.getConfigManager();
+        this.inventory = Bukkit.createInventory(this, 27, "⚙ Plugin Configuration");
     }
 
-    public static void handleClick(Player player, int slot, Inventory inventory, ConfigManager configManager, OverWatchML plugin) {
+    @Override
+    public void open(Player player) {
+        refresh(player);
+        player.openInventory(inventory);
+        GUIEffects.playOpen(player);
+    }
 
-        if (!player.hasPermission(PERMISSION)) {
-            player.sendMessage(Component.text("You don't have permission to modify the config settings.").color(NamedTextColor.RED));
-            player.closeInventory();
-            return;
+    @Override
+    public void close(Player player) {}
+
+    @Override
+    public void refresh(Player player) {
+        inventory.clear();
+        for (int i = 0; i < 27; i++) {
+            inventory.setItem(i, ItemBuilder.material(Material.GRAY_STAINED_GLASS_PANE).name(" ").build());
         }
 
+        inventory.setItem(11, ItemBuilder.material(Material.DIAMOND_PICKAXE).name("§bDecoy Settings").build());
+        inventory.setItem(13, ItemBuilder.material(Material.CLOCK).name("§eAuto-Save Settings").build());
+        inventory.setItem(15, ItemBuilder.material(Material.SHIELD).name("§aStaff Settings").build());
+        inventory.setItem(22, ItemBuilder.material(Material.BARRIER).name("§cBack").build());
+    }
+
+    @Override
+    public void handleClick(InventoryClickEvent event) {
+        Player player = (Player) event.getWhoClicked();
+        int slot = event.getSlot();
 
         switch (slot) {
-            case 11:
-                new DecoySettingsGUI(configManager, plugin).openInventory(player);
-                break;
-            case 13:
-                new AutoSaveSettingsGUI(configManager, plugin).openInventory(player);
-                break;
-            case 15:
-                new StaffSettingsGUI(configManager, plugin).openInventory(player);
-                break;
-            case 22:
-                new StaffMenuGUI().openInventory(player);
-                break;
+            case 11 -> GUINavigationStack.push(player, new DecoySettingsGUI(plugin));
+            case 13 -> GUINavigationStack.push(player, new AutoSaveSettingsGUI(plugin));
+            case 15 -> GUINavigationStack.push(player, new StaffSettingsGUI(plugin));
+            case 22 -> GUINavigationStack.pop(player);
         }
     }
 
-    private void initializeItems() {
-
-        ItemStack border = createGuiItem(Material.GRAY_STAINED_GLASS_PANE, " ", false);
-
-
-        for (int i = 0; i < 9; i++) {
-            inv.setItem(i, border);
-            inv.setItem(18 + i, border);
-        }
-        inv.setItem(9, border);
-        inv.setItem(17, border);
-
-
-        inv.setItem(4, createGuiItem(Material.REDSTONE, "Plugin Configuration", true, TextDecoration.BOLD, NamedTextColor.RED, Component.text("Select a category to configure").color(NamedTextColor.GRAY)));
-
-
-        inv.setItem(11, createGuiItem(Material.DIAMOND_PICKAXE, "Decoy Settings", true, TextDecoration.BOLD, NamedTextColor.AQUA, Component.text("Configure decoy ore generation").color(NamedTextColor.GRAY), Component.text("Settings for detecting X-ray").color(NamedTextColor.GRAY)));
-
-        inv.setItem(13, createGuiItem(Material.CLOCK, "Auto-Save Settings", true, TextDecoration.BOLD, NamedTextColor.YELLOW, Component.text("Configure automatic data saving").color(NamedTextColor.GRAY), Component.text("Manage data persistence").color(NamedTextColor.GRAY)));
-
-        inv.setItem(15, createGuiItem(Material.SHIELD, "Staff Settings", true, TextDecoration.BOLD, NamedTextColor.GREEN, Component.text("Configure staff alerts and tools").color(NamedTextColor.GRAY), Component.text("Manage staff notifications").color(NamedTextColor.GRAY)));
-
-
-        inv.setItem(22, createGuiItem(Material.BARRIER, "Back to в›Џ Staff Control Panel", false, null, NamedTextColor.RED));
-    }
-
-    private ItemStack createGuiItem(Material material, String name, boolean enchanted, TextDecoration decoration, NamedTextColor color, Component... lore) {
-        ItemStack item = new ItemStack(material);
-        ItemMeta meta = item.getItemMeta();
-
-        Component displayName = Component.text(name);
-        if (color != null) {
-            displayName = displayName.color(color);
-        }
-        if (decoration != null) {
-            displayName = displayName.decorate(decoration);
-        }
-        meta.displayName(displayName);
-
-        if (lore.length > 0) {
-            List<Component> itemLore = new ArrayList<>();
-            Collections.addAll(itemLore, lore);
-            meta.lore(itemLore);
-        }
-
-        if (enchanted) {
-            meta.addEnchant(Enchantment.MENDING, 1, true);
-            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
-        }
-
-        item.setItemMeta(meta);
-        return item;
-    }
-
-    private ItemStack createGuiItem(Material material, String name, boolean enchanted) {
-        return createGuiItem(material, name, enchanted, null, null);
-    }
-
-    public void openInventory(Player player) {
-
-        if (!player.hasPermission(PERMISSION)) {
-            player.sendMessage(Component.text("You don't have permission to access the config settings.").color(NamedTextColor.RED));
-            return;
-        }
-
-        player.openInventory(inv);
+    @Override
+    public Inventory getInventory() {
+        return inventory;
     }
 }

@@ -44,14 +44,19 @@ public class PlayerProfileGUI implements OverWatchGUI {
         OfflinePlayer op = Bukkit.getOfflinePlayer(targetId);
         PlayerBehaviorProfile profile = plugin.getContext().getProfileManager().getProfile(targetId);
         PlayerEventBuffer buffer = plugin.getContext().getProfileManager().getEventBuffer(targetId);
-        
+
+        if (profile == null || buffer == null) {
+            player.sendMessage("§cNo data available for player " + (op.getName() != null ? op.getName() : "Unknown"));
+            return;
+        }
+
         String status = op.isOnline() ? "§aOnline" : "§7Offline";
         String lastAnalysis = dateFormat.format(new Date(profile.getLastAnalysisTime()));
 
         // --- Header (0-8) ---
         inventory.setItem(4, ItemBuilder.material(Material.PLAYER_HEAD)
                 .skull(op.getName())
-                .name("§b" + op.getName())
+                .name("§b" + (op.getName() != null ? op.getName() : "Unknown"))
                 .lore(LoreFormatter.format(List.of(
                         "§7Status: " + status,
                         "§7Last Analysis: §f" + lastAnalysis,
@@ -69,18 +74,20 @@ public class PlayerProfileGUI implements OverWatchGUI {
         List<PlayerEventBuffer.BehavioralEvent> events = buffer.getEvents();
         int eventSlot = 28;
         int maxEvents = 16;
-        
+
         inventory.setItem(19, ItemBuilder.material(Material.BOOK).name("§eRecent Behavioral Events").build());
-        
-        for (int i = 0; i < Math.min(events.size(), maxEvents); i++) {
-            PlayerEventBuffer.BehavioralEvent event = events.get(events.size() - 1 - i); // Newest first
-            inventory.setItem(eventSlot + i + (i/8)*1, ItemBuilder.material(getEventMaterial(event.eventType()))
-                    .name("§f" + event.eventType().toUpperCase())
-                    .lore(List.of(
-                            "§7Time: §f" + new SimpleDateFormat("HH:mm:ss").format(new Date(event.timestamp())),
-                            "§7Value: §e" + event.value(),
-                            "§7Context: §7" + event.context().toString()
-                    )).build());
+
+        if (events != null) {
+            for (int i = 0; i < Math.min(events.size(), maxEvents); i++) {
+                PlayerEventBuffer.BehavioralEvent event = events.get(events.size() - 1 - i); // Newest first
+                inventory.setItem(eventSlot + i + (i/8)*1, ItemBuilder.material(getEventMaterial(event.eventType()))
+                        .name("§f" + event.eventType().toUpperCase())
+                        .lore(List.of(
+                                "§7Time: §f" + new SimpleDateFormat("HH:mm:ss").format(new Date(event.timestamp())),
+                                "§7Value: §e" + event.value(),
+                                "§7Context: §7" + event.context().toString()
+                        )).build());
+            }
         }
 
         // --- Actions (Bottom) ---

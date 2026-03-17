@@ -230,7 +230,7 @@ public class AdvancedDetectionEngine implements Listener {
         Location from = event.getFrom();
         Location to = event.getTo();
 
-        if (to == null || from.distance(to) < 0.1) return; // Filter micro-movements
+        if (to == null || from.getWorld() == null || to.getWorld() == null || !from.getWorld().equals(to.getWorld()) || from.distance(to) < 0.1) return; // Filter micro-movements
         
         long now = System.currentTimeMillis();
         Long lastTime = lastMoveAnalysis.get(player.getUniqueId());
@@ -564,12 +564,21 @@ public class AdvancedDetectionEngine implements Listener {
         // Calculate actual path distance
         double actualDistance = 0.0;
         for (int i = 1; i < recentLocations.size(); i++) {
-            actualDistance += recentLocations.get(i-1).distance(recentLocations.get(i));
+            Location prev = recentLocations.get(i-1);
+            Location curr = recentLocations.get(i);
+            if (prev.getWorld() != null && curr.getWorld() != null && prev.getWorld().equals(curr.getWorld())) {
+                actualDistance += prev.distance(curr);
+            }
         }
 
         // Calculate straight-line distance from start to end
         Location start = recentLocations.get(0);
         Location end = recentLocations.get(recentLocations.size() - 1);
+        
+        if (start.getWorld() == null || end.getWorld() == null || !start.getWorld().equals(end.getWorld())) {
+            return 0.5;
+        }
+        
         double straightDistance = start.distance(end);
 
         if (straightDistance <= 0.1) return 1.0; // No movement
@@ -606,7 +615,9 @@ public class AdvancedDetectionEngine implements Listener {
             // Check if this location was visited recently (within last 5 movements)
             for (int j = Math.max(0, i - 5); j < i; j++) {
                 Location previous = recentLocations.get(j);
-                if (current.distance(previous) < 2.0) { // Within 2 blocks
+                if (current.getWorld() != null && previous.getWorld() != null && 
+                    current.getWorld().equals(previous.getWorld()) && 
+                    current.distance(previous) < 2.0) { // Within 2 blocks
                     backtrackCount++;
                     break; // Count each backtrack only once
                 }

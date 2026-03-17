@@ -2,6 +2,7 @@ package net.denfry.owml.gui.modern;
 
 import net.denfry.owml.OverWatchML;
 import net.denfry.owml.alerts.StaffAlertManager;
+import net.denfry.owml.gui.AlertPanel;
 import net.denfry.owml.managers.ISuspiciousService;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -12,6 +13,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -41,7 +43,7 @@ public class MainHubGUI implements OverWatchGUI {
 
     @Override
     public void refresh(Player player) {
-        // --- Верхний ряд (Статус) ---
+        // --- Top row (Status) ---
         double tps = Bukkit.getTPS()[0];
         Material tpsMaterial = tps >= 18.0 ? Material.LIME_STAINED_GLASS_PANE :
                 (tps >= 15.0 ? Material.YELLOW_STAINED_GLASS_PANE : Material.RED_STAINED_GLASS_PANE);
@@ -61,7 +63,7 @@ public class MainHubGUI implements OverWatchGUI {
 
         List<StaffAlertManager.AlertRecord> alerts = plugin.getStaffAlertManager().getAlertHistory();
         inventory.setItem(2, ItemBuilder.material(Material.RED_STAINED_GLASS_PANE)
-                .name("§cUnread Alerts: " + alerts.size())
+                .name("§cUnread Alerts: " + (alerts != null ? alerts.size() : 0))
                 .build());
 
         ItemStack separator = ItemBuilder.material(Material.GRAY_STAINED_GLASS_PANE).name(" ").build();
@@ -69,21 +71,23 @@ public class MainHubGUI implements OverWatchGUI {
             inventory.setItem(i, separator);
         }
 
-        // --- Основные разделы ---
+        // --- Main sections ---
         ISuspiciousService suspService = plugin.getContext().getSuspiciousService();
-        Set<UUID> suspiciousPlayers = suspService.getSuspiciousPlayers();
+        Set<UUID> suspiciousPlayers = suspService != null ? suspService.getSuspiciousPlayers() : Collections.emptySet();
         List<UUID> highRiskPlayers = suspiciousPlayers.stream()
-                .filter(uuid -> suspService.getSuspicionLevel(uuid) > 60)
+                .filter(uuid -> suspService != null && suspService.getSuspicionLevel(uuid) > 60)
                 .collect(Collectors.toList());
 
         List<String> suspLore = new ArrayList<>();
         suspLore.add("§7Top Suspicious Players:");
         highRiskPlayers.stream()
-                .sorted((p1, p2) -> Integer.compare(suspService.getSuspicionLevel(p2), suspService.getSuspicionLevel(p1)))
+                .sorted((p1, p2) -> Integer.compare(
+                        suspService != null ? suspService.getSuspicionLevel(p2) : 0,
+                        suspService != null ? suspService.getSuspicionLevel(p1) : 0))
                 .limit(3)
                 .forEach(uuid -> {
                     OfflinePlayer op = Bukkit.getOfflinePlayer(uuid);
-                    suspLore.add("§c" + op.getName() + " §7- Score: §e" + suspService.getSuspicionLevel(uuid));
+                    suspLore.add("§c" + op.getName() + " §7- Score: §e" + (suspService != null ? suspService.getSuspicionLevel(uuid) : "N/A"));
                 });
         if (suspLore.size() == 1) suspLore.add("§aNo players currently suspicious.");
 
@@ -95,24 +99,30 @@ public class MainHubGUI implements OverWatchGUI {
 
         List<String> alertLore = new ArrayList<>();
         alertLore.add("§7Recent alerts:");
-        alerts.stream()
-                .skip(Math.max(0, alerts.size() - 3))
-                .forEach(alert -> alertLore.add("§c" + alert.getPlayerName() + "§7: " + alert.getMessage()));
-        
+        if (alerts != null) {
+            alerts.stream()
+                    .skip(Math.max(0, alerts.size() - 3))
+                    .forEach(alert -> {
+                        String playerName = alert.getPlayerName() != null ? alert.getPlayerName() : "Unknown";
+                        String message = alert.getMessage() != null ? alert.getMessage() : "No message";
+                        alertLore.add("§c" + playerName + "§7: " + message);
+                    });
+        }
+
         inventory.setItem(12, ItemBuilder.material(Material.BELL)
-                .name("§eLive Alerts (" + alerts.size() + ")")
+                .name("§eLive Alerts (" + (alerts != null ? alerts.size() : 0) + ")")
                 .lore(alertLore)
                 .build());
 
         inventory.setItem(14, ItemBuilder.material(Material.COMPASS)
                 .name("§dML Statistics")
                 .lore(List.of("§7Overall Accuracy: §e" + String.format("%.1f%%", accuracy),
-                        "§7Precision: §a" + String.format("%.1f%%", accuracy + 2.1), // Placeholder simulation
+                        "§7Precision: §a" + String.format("%.1f%%", accuracy + 2.1),
                         "§7Recall: §a" + String.format("%.1f%%", accuracy - 1.5),
                         "§7F1-Score: §a" + String.format("%.1f%%", accuracy)))
                 .build());
 
-        int pendingAppeals = plugin.getAppealManager().getPendingAppeals().size();
+        int pendingAppeals = plugin.getAppealManager() != null ? plugin.getAppealManager().getPendingAppeals().size() : 0;
         inventory.setItem(16, ItemBuilder.material(Material.ENCHANTED_BOOK)
                 .name("§6Punishments")
                 .lore(List.of("§7Pending Decisions: §e" + pendingAppeals))
@@ -143,7 +153,7 @@ public class MainHubGUI implements OverWatchGUI {
                 .lore(List.of("§7Access the detailed staff control panel", "§7with management tools."))
                 .build());
 
-        // --- Быстрые действия ---
+        // --- Quick actions ---
         inventory.setItem(45, ItemBuilder.material(Material.RED_WOOL)
                 .name("§cEmergency Block All")
                 .lore(List.of("§7Instantly block all suspicious", "§7activities and isolate players."))
@@ -172,21 +182,28 @@ public class MainHubGUI implements OverWatchGUI {
     public void handleClick(InventoryClickEvent event) {
         Player player = (Player) event.getWhoClicked();
         int slot = event.getSlot();
+        
+        String actionName = "Unknown";
 
         switch (slot) {
             case 10: // Suspicious Players
+                actionName = "Open Suspicious Players";
                 GUINavigationStack.push(player, new SuspiciousPlayersGUI(plugin));
                 break;
             case 12: // Live Alerts
-                GUINavigationStack.push(player, new LiveAlertsGUI(plugin));
+                actionName = "Open Live Alerts";
+                GUINavigationStack.push(player, new AlertPanel(plugin));
                 break;
             case 14: // ML Statistics
+                actionName = "Open ML Statistics";
                 GUINavigationStack.push(player, new MLDashboardGUI(plugin));
                 break;
             case 16: // Punishments
+                actionName = "Open Punishments";
                 GUINavigationStack.push(player, new PunishmentPanelGUI(plugin));
                 break;
             case 28: // Player Search
+                actionName = "Start Player Search";
                 player.closeInventory();
                 GUIEffects.showChatPrompt(player, "Введите имя игрока:", 30).thenAccept(name -> {
                     if (name != null) {
@@ -198,29 +215,37 @@ public class MainHubGUI implements OverWatchGUI {
                 });
                 break;
             case 30: // Settings
+                actionName = "Open Settings";
                 GUINavigationStack.push(player, new SettingsPanelGUI(plugin));
                 break;
             case 40: // Staff Control Panel
-                GUINavigationStack.push(player, new net.denfry.owml.gui.StaffMenuGUI());
+                actionName = "Open Staff Menu";
+                GUINavigationStack.push(player, new net.denfry.owml.gui.StaffMenuGUI(plugin));
                 break;
             case 32: // Reports
-                player.sendMessage("§fOpening Reports...");
+                actionName = "Open Reports";
+                GUINavigationStack.push(player, new net.denfry.owml.gui.subgui.MLReportsGUI(plugin, 0));
                 break;
             case 34: // ML Training
-                player.sendMessage("§aOpening ML Training...");
+                actionName = "Open ML Training";
+                GUINavigationStack.push(player, new net.denfry.owml.gui.subgui.MLAnalysisGUI(plugin));
                 break;
             case 45: // Emergency Block All
+                actionName = "Emergency Block All";
                 GUIEffects.showConfirmDialog(player, "§4Block all suspicious?", () -> {
                     player.sendMessage("§cEmergency block executed!");
                     GUIEffects.playCriticalAlert(player);
+                    plugin.getLogger().warning("GUI: " + player.getName() + " executed EMERGENCY BLOCK ALL!");
                 });
                 break;
             case 46: // Pause Punishments
                 punishmentsPaused = !punishmentsPaused;
+                actionName = (punishmentsPaused ? "Pause" : "Resume") + " Punishments";
                 GUIEffects.playSuccess(player);
                 refresh(player);
                 break;
             case 47: // Scan All Online Players
+                actionName = "Scan All Players";
                 player.closeInventory();
                 org.bukkit.boss.BossBar bar = GUIEffects.showProgressBar(player, "§dScanning players...");
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
@@ -230,12 +255,18 @@ public class MainHubGUI implements OverWatchGUI {
                 }, 60L);
                 break;
             case 49: // Refresh
+                actionName = "Refresh Data";
                 refresh(player);
                 GUIEffects.playOpen(player);
                 break;
             case 53: // Close
+                actionName = "Close GUI";
                 player.closeInventory();
                 break;
+        }
+        
+        if (!actionName.equals("Unknown")) {
+            plugin.getLogger().info("GUI: " + player.getName() + " -> " + actionName);
         }
     }
 

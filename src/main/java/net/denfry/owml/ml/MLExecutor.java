@@ -80,6 +80,17 @@ public class MLExecutor {
     }
 
     /**
+     * Executes task on Bukkit main thread after delay
+     */
+    public void runTaskLater(Runnable task, long delayTicks) {
+        if (shuttingDown) {
+            return;
+        }
+
+        Bukkit.getScheduler().runTaskLater(plugin, task, delayTicks);
+    }
+
+    /**
      * Executes task on main thread with result
      */
     public <T> CompletableFuture<T> runOnMainThread(Callable<T> task) {

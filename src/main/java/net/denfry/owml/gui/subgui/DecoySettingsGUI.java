@@ -1,354 +1,72 @@
 package net.denfry.owml.gui.subgui;
 
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.format.TextDecoration;
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import net.denfry.owml.OverWatchML;
+import net.denfry.owml.config.ConfigManager;
+import net.denfry.owml.gui.modern.GUIEffects;
+import net.denfry.owml.gui.modern.GUINavigationStack;
+import net.denfry.owml.gui.modern.ItemBuilder;
+import net.denfry.owml.gui.modern.OverWatchGUI;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
-import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
-import org.bukkit.event.inventory.ClickType;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.ItemFlag;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
-import net.denfry.owml.config.ConfigManager;
-import net.denfry.owml.OverWatchML;
-import net.denfry.owml.utils.DirectConfigSaver;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
-public class DecoySettingsGUI {
-    private final static String TITLE = "вљ™ Decoy Settings";
-    private final Inventory inv;
-    private final ConfigManager configManager;
+public class DecoySettingsGUI implements OverWatchGUI {
     private final OverWatchML plugin;
+    private final ConfigManager configManager;
+    private final Inventory inventory;
 
-    public DecoySettingsGUI(ConfigManager configManager, OverWatchML plugin) {
-        this.configManager = configManager;
+    public DecoySettingsGUI(OverWatchML plugin) {
         this.plugin = plugin;
-
-
-        inv = Bukkit.createInventory(null, 36, Component.text(TITLE).color(NamedTextColor.AQUA));
-
-        initializeItems();
+        this.configManager = plugin.getConfigManager();
+        this.inventory = Bukkit.createInventory(this, 36, "§bDecoy Settings");
     }
 
-    public static void handleClick(Player player, int slot, Inventory inventory, ClickType clickType, ConfigManager configManager, OverWatchML plugin) {
+    @Override
+    public void open(Player player) {
+        refresh(player);
+        player.openInventory(inventory);
+        GUIEffects.playOpen(player);
+    }
 
-        if (!player.hasPermission(ConfigSettingsGUI.PERMISSION)) {
-            player.sendMessage(Component.text("You don't have permission to modify the config settings.").color(NamedTextColor.RED));
-            player.closeInventory();
-            return;
+    @Override
+    public void close(Player player) {}
+
+    @Override
+    public void refresh(Player player) {
+        inventory.clear();
+        for (int i = 0; i < 36; i++) {
+            inventory.setItem(i, ItemBuilder.material(Material.GRAY_STAINED_GLASS_PANE).name(" ").build());
         }
 
-
-        if (slot == 31) {
-            new ConfigSettingsGUI(configManager, plugin).openInventory(player);
-            return;
-        }
-
-
-        boolean isBorder = slot < 9 || slot >= 27 || slot % 9 == 0 || slot % 9 == 8;
-        boolean isHeader = slot == 4;
-
-        if (isBorder || isHeader) {
-            return;
-        }
-
-
-        ItemStack clicked = inventory.getItem(slot);
-        if (clicked == null || !clicked.hasItemMeta() || !clicked.getItemMeta().hasLore()) {
-            return;
-        }
-
-
-        List<Component> lore = clicked.getItemMeta().lore();
-        if (lore == null || lore.isEmpty()) {
-            return;
-        }
-
-
-        Component configPathComponent = lore.get(lore.size() - 1);
-
-        String configPathLine = PlainTextComponentSerializer.plainText().serialize(configPathComponent);
-
-
-        if (!configPathLine.contains("Config path:")) {
-            return;
-        }
-
-
-        String configPath = configPathLine.substring(configPathLine.lastIndexOf("Config path:") + 12).trim();
-        plugin.getLogger().info("Processing click for config path: " + configPath);
-
-
-        if (clicked.getType() == Material.LIME_CONCRETE || clicked.getType() == Material.RED_CONCRETE) {
-            boolean currentValue = clicked.getType() == Material.LIME_CONCRETE;
-            boolean newValue = !currentValue;
-
-
-            boolean success = DirectConfigSaver.saveBoolean(plugin, configPath, newValue);
-
-            if (success) {
-
-                plugin.reloadConfig();
-                configManager.reloadConfig();
-
-
-                player.sendMessage(Component.text("Setting ").color(NamedTextColor.GOLD).append(Component.text(configPath).color(NamedTextColor.YELLOW)).append(Component.text(" changed to ").color(NamedTextColor.GOLD)).append(Component.text(newValue ? "ENABLED" : "DISABLED").color(newValue ? NamedTextColor.GREEN : NamedTextColor.RED)));
-
-
-                if (plugin.getConfigManager().isWebhookAlertEnabled("staff_actions")) {
-                    plugin.getWebhookManager().sendStaffActionLog(player.getName(), "Changed Configuration", configPath + " в†’ " + (newValue ? "ENABLED" : "DISABLED"));
-                }
-
-
-                new DecoySettingsGUI(configManager, plugin).openInventory(player);
-            } else {
-                player.sendMessage(Component.text("Failed to save config change. Check console for details.").color(NamedTextColor.RED));
-            }
-
-            return;
-        }
-
-
-        if (clicked.getType() == Material.PAPER) {
-
-            Component valueLine = lore.get(1);
-            String valueStr = PlainTextComponentSerializer.plainText().serialize(valueLine);
-            String extractedValue = valueStr.substring(valueStr.lastIndexOf(": ") + 2).trim();
-
-
-            boolean isInteger = !extractedValue.contains(".");
-
-
-            boolean isLeftClick = (clickType == ClickType.LEFT || clickType == ClickType.SHIFT_LEFT);
-            boolean isRightClick = (clickType == ClickType.RIGHT || clickType == ClickType.SHIFT_RIGHT);
-
-            if (!isLeftClick && !isRightClick) {
-                player.sendMessage(Component.text("Please use left-click to increase or right-click to decrease the value.").color(NamedTextColor.RED));
-                return;
-            }
-
-            if (isInteger) {
-                try {
-                    int currentValue = Integer.parseInt(extractedValue);
-                    int newValue;
-
-                    if (isLeftClick) {
-
-                        if (configPath.equals("decoy.timeWindowTicks") || configPath.equals("decoy.revertDelay")) {
-
-                            newValue = currentValue + 1200;
-                        } else {
-                            newValue = currentValue + 1;
-                        }
-                    } else {
-
-                        if (configPath.equals("decoy.timeWindowTicks") || configPath.equals("decoy.revertDelay")) {
-
-                            newValue = Math.max(1200, currentValue - 1200);
-                        } else {
-                            newValue = Math.max(1, currentValue - 1);
-                        }
-                    }
-
-
-                    boolean success = DirectConfigSaver.saveInteger(plugin, configPath, newValue);
-
-                    if (success) {
-
-                        plugin.reloadConfig();
-                        configManager.reloadConfig();
-
-
-                        new DecoySettingsGUI(configManager, plugin).openInventory(player);
-
-
-                        player.sendMessage(Component.text("Setting ").color(NamedTextColor.GOLD).append(Component.text(configPath).color(NamedTextColor.YELLOW)).append(Component.text(" updated to ").color(NamedTextColor.GOLD)).append(Component.text(String.valueOf(newValue)).color(NamedTextColor.AQUA)));
-
-
-                        if (plugin.getConfigManager().isWebhookAlertEnabled("staff_actions")) {
-                            plugin.getWebhookManager().sendStaffActionLog(player.getName(), "Changed Configuration", configPath + " в†’ " + newValue);
-                        }
-                    } else {
-                        player.sendMessage(Component.text("Failed to save config change. Check console for details.").color(NamedTextColor.RED));
-                    }
-                } catch (NumberFormatException e) {
-                    plugin.getLogger().severe("Error parsing integer value: " + extractedValue);
-                    player.sendMessage(Component.text("Error parsing number. Please report this to a developer.").color(NamedTextColor.RED));
-                }
-            } else {
-                try {
-                    double currentValue = Double.parseDouble(extractedValue);
-                    double newValue;
-
-                    if (isLeftClick) {
-                        newValue = currentValue + 0.1;
-                    } else {
-                        newValue = Math.max(0.1, currentValue - 0.1);
-                    }
-
-
-                    newValue = Math.round(newValue * 10) / 10.0;
-
-
-                    boolean success = DirectConfigSaver.saveDouble(plugin, configPath, newValue);
-
-                    if (success) {
-
-                        plugin.reloadConfig();
-                        configManager.reloadConfig();
-
-
-                        new DecoySettingsGUI(configManager, plugin).openInventory(player);
-
-
-                        player.sendMessage(Component.text("Setting ").color(NamedTextColor.GOLD).append(Component.text(configPath).color(NamedTextColor.YELLOW)).append(Component.text(" updated to ").color(NamedTextColor.GOLD)).append(Component.text(String.valueOf(newValue)).color(NamedTextColor.AQUA)));
-
-
-                        if (plugin.getConfigManager().isWebhookAlertEnabled("staff_actions")) {
-                            plugin.getWebhookManager().sendStaffActionLog(player.getName(), "Changed Configuration", configPath + " в†’ " + newValue);
-                        }
-                    } else {
-                        player.sendMessage(Component.text("Failed to save config change. Check console for details.").color(NamedTextColor.RED));
-                    }
-                } catch (NumberFormatException e) {
-                    plugin.getLogger().severe("Error parsing double value: " + extractedValue);
-                    player.sendMessage(Component.text("Error parsing number. Please report this to a developer.").color(NamedTextColor.RED));
-                }
-            }
+        boolean enabled = configManager.isDecoyEnabled();
+        inventory.setItem(10, ItemBuilder.material(enabled ? Material.LIME_CONCRETE : Material.RED_CONCRETE)
+                .name("§bDecoy System: " + (enabled ? "§aENABLED" : "§cDISABLED"))
+                .lore(List.of("§7Click to toggle"))
+                .build());
+
+        inventory.setItem(11, ItemBuilder.material(Material.PAPER).name("§eOre Threshold").lore(List.of("§7Current: §f" + configManager.getOreThreshold())).build());
+        inventory.setItem(31, ItemBuilder.material(Material.BARRIER).name("§cBack").build());
+    }
+
+    @Override
+    public void handleClick(InventoryClickEvent event) {
+        Player player = (Player) event.getWhoClicked();
+        int slot = event.getSlot();
+
+        if (slot == 10) {
+            configManager.setDecoyEnabled(!configManager.isDecoyEnabled());
+            refresh(player);
+        } else if (slot == 31) {
+            GUINavigationStack.pop(player);
         }
     }
 
-    private void initializeItems() {
-
-        ItemStack border = createGuiItem(Material.GRAY_STAINED_GLASS_PANE, " ", false);
-
-
-        for (int i = 0; i < 9; i++) {
-            inv.setItem(i, border);
-            inv.setItem(27 + i, border);
-        }
-
-
-        inv.setItem(4, createGuiItem(Material.DIAMOND_PICKAXE, "Decoy Settings", true, TextDecoration.BOLD, NamedTextColor.AQUA, Component.text("Configure decoy ore generation").color(NamedTextColor.GRAY)));
-
-
-        inv.setItem(31, createGuiItem(Material.BARRIER, "Back to Plugin Configuration", false, null, NamedTextColor.RED));
-
-
-        addDecoySettings();
-    }
-
-    private void addDecoySettings() {
-
-
-        inv.setItem(10, createToggleItem("Decoy Enabled", configManager.isDecoyEnabled(), "Enables or disables the decoy system", "decoy.enabled"));
-
-        inv.setItem(11, createNumberItem("Ore Threshold", configManager.getOreThreshold(), "Number of ores before decoy triggers", "decoy.oreThreshold"));
-
-        inv.setItem(12, createNumberItem("Time Window (ticks)", (int) configManager.getTimeWindowTicks(), "Time window for counting ores (1200 = 1 minute)", "decoy.timeWindowTicks"));
-
-
-        inv.setItem(19, createNumberItem("Decoy Distance", (int) configManager.getDecoyDistance(), "Distance from mined block to place decoy", "decoy.distance"));
-
-        inv.setItem(20, createNumberItem("Field Offset", configManager.getDecoyFieldOffset(), "Offset used in decoy placement", "decoy.fieldOffset"));
-
-        inv.setItem(21, createNumberItem("Max Decay Distance", configManager.getMaxDecayDistance(), "Max distance before decoy reverts", "decoy.maxDistance"));
-
-
-        inv.setItem(16, createNumberItem("Revert Delay (ticks)", configManager.getDecoyRevertDelay(), "Delay before decoy reverts (1200 = 1 minute)", "decoy.revertDelay"));
-
-        inv.setItem(25, createToggleItem("Warn On Decoy", configManager.isWarnOnDecoy(), "Warn players when they break a decoy", "decoy.warnOnDecoy"));
-    }
-
-    private ItemStack createToggleItem(String name, boolean value, String description, String configPath) {
-        Material material = value ? Material.LIME_CONCRETE : Material.RED_CONCRETE;
-        Component status = value ? Component.text("ENABLED").color(NamedTextColor.GREEN) : Component.text("DISABLED").color(NamedTextColor.RED);
-
-        List<Component> lore = new ArrayList<>();
-        lore.add(Component.text(description).color(NamedTextColor.GRAY));
-        lore.add(status);
-        lore.add(Component.text("Click to toggle").color(NamedTextColor.YELLOW));
-        lore.add(Component.text("Config path: " + configPath).color(NamedTextColor.DARK_GRAY));
-
-        return createGuiItemWithLore(material, Component.text(name).color(NamedTextColor.GOLD), value, lore);
-    }
-
-    private ItemStack createNumberItem(String name, Number value, String description, String configPath) {
-        List<Component> lore = new ArrayList<>();
-        lore.add(Component.text(description).color(NamedTextColor.GRAY));
-        lore.add(Component.text("Current value: ").color(NamedTextColor.AQUA).append(Component.text(value.toString()).color(NamedTextColor.WHITE)));
-        lore.add(Component.text("Left-click to increase").color(NamedTextColor.YELLOW));
-        lore.add(Component.text("Right-click to decrease").color(NamedTextColor.YELLOW));
-        lore.add(Component.text("Config path: " + configPath).color(NamedTextColor.DARK_GRAY));
-
-        return createGuiItemWithLore(Material.PAPER, Component.text(name).color(NamedTextColor.GOLD), false, lore);
-    }
-
-    private ItemStack createGuiItem(Material material, String name, boolean enchanted, TextDecoration decoration, NamedTextColor color, Component... lore) {
-        ItemStack item = new ItemStack(material);
-        ItemMeta meta = item.getItemMeta();
-
-        Component displayName = Component.text(name);
-        if (color != null) {
-            displayName = displayName.color(color);
-        }
-        if (decoration != null) {
-            displayName = displayName.decorate(decoration);
-        }
-        meta.displayName(displayName);
-
-        if (lore.length > 0) {
-            List<Component> itemLore = new ArrayList<>();
-            Collections.addAll(itemLore, lore);
-            meta.lore(itemLore);
-        }
-
-        if (enchanted) {
-            meta.addEnchant(Enchantment.MENDING, 1, true);
-            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
-        }
-
-        item.setItemMeta(meta);
-        return item;
-    }
-
-    private ItemStack createGuiItem(Material material, String name, boolean enchanted) {
-        return createGuiItem(material, name, enchanted, null, null);
-    }
-
-    private ItemStack createGuiItemWithLore(Material material, Component displayName, boolean enchanted, List<Component> lore) {
-        ItemStack item = new ItemStack(material);
-        ItemMeta meta = item.getItemMeta();
-
-        meta.displayName(displayName);
-
-        if (lore != null && !lore.isEmpty()) {
-            meta.lore(lore);
-        }
-
-        if (enchanted) {
-            meta.addEnchant(Enchantment.MENDING, 1, true);
-            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
-        }
-
-        item.setItemMeta(meta);
-        return item;
-    }
-
-    public void openInventory(Player player) {
-
-        if (!player.hasPermission(ConfigSettingsGUI.PERMISSION)) {
-            player.sendMessage(Component.text("You don't have permission to access the config settings.").color(NamedTextColor.RED));
-            return;
-        }
-
-        player.openInventory(inv);
+    @Override
+    public Inventory getInventory() {
+        return inventory;
     }
 }

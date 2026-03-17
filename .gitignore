@@ -46,6 +46,7 @@ desktop.ini
 test-server/
 run/
 plugins/
+!src/main/java/net/denfry/owml/plugins/
 logs/
 cache/
 world/
@@ -58,6 +59,7 @@ stats/
 suspicious/
 ml-data/
 models/
+!src/main/java/net/denfry/owml/ml/v2/models/
 profiles/
 *.model
 *.onnx

@@ -141,11 +141,19 @@ public class PathPredictor implements DetectionAnalyzer {
         Location start = locations.get(0);
         Location end = locations.get(locations.size() - 1);
 
+        if (start.getWorld() == null || end.getWorld() == null || !start.getWorld().equals(end.getWorld())) {
+            return 0.0;
+        }
+
         double directDistance = start.distance(end);
         double actualDistance = 0.0;
 
         for (int i = 1; i < locations.size(); i++) {
-            actualDistance += locations.get(i - 1).distance(locations.get(i));
+            Location prev = locations.get(i - 1);
+            Location curr = locations.get(i);
+            if (prev.getWorld() != null && curr.getWorld() != null && prev.getWorld().equals(curr.getWorld())) {
+                actualDistance += prev.distance(curr);
+            }
         }
 
         if (actualDistance == 0) return 0.0;
@@ -296,9 +304,10 @@ public class PathPredictor implements DetectionAnalyzer {
      * Count ores near a specific location
      */
     private int countNearbyOres(Location center, List<Location> allLocations) {
+        if (center == null || center.getWorld() == null) return 0;
         return (int) allLocations.stream()
                 .filter(loc -> isLikelyOreLocation(loc))
-                .filter(loc -> loc.distance(center) <= 5.0)
+                .filter(loc -> loc != null && loc.getWorld() != null && loc.getWorld().equals(center.getWorld()) && loc.distance(center) <= 5.0)
                 .count();
     }
 

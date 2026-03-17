@@ -1,24 +1,22 @@
 package net.denfry.owml.commands.subcommands;
 
+import net.denfry.owml.commands.AbstractSubCommand;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.jetbrains.annotations.NotNull;
 import net.denfry.owml.OverWatchML;
 
-public class ReloadCommand implements CommandExecutor {
-
-    private final OverWatchML plugin;
+public class ReloadCommand extends AbstractSubCommand {
 
     public ReloadCommand(OverWatchML plugin) {
-        this.plugin = plugin;
+        super(plugin, "reload", "owml.reload", "Reload plugin configuration", "/owml reload", "r");
     }
 
     @Override
-    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (!sender.hasPermission("owml.reload")) {
-            sender.sendMessage(Component.text("You do not have permission to reload the plugin.").color(NamedTextColor.RED));
+    public boolean execute(@NotNull CommandSender sender, @NotNull String[] args) {
+        if (!sender.hasPermission(getPermission())) {
+            sendNoPermission(sender);
             return true;
         }
 

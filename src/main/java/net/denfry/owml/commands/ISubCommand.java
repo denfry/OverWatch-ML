@@ -11,6 +11,7 @@ import java.util.List;
 
 public interface ISubCommand {
     @NotNull String getName();
+    @NotNull List<String> getAliases();
     @NotNull String getPermission();
     @NotNull String getDescription();
     @NotNull String getUsage();
