@@ -90,20 +90,8 @@ public class PerformanceMonitor {
      * Get current TPS (Ticks Per Second).
      */
     public static double getTPS() {
-        long totalTime = 0;
-        int validTicks = 0;
-
-        for (long tickTime : tickTimes) {
-            if (tickTime > 0) {
-                totalTime += tickTime;
-                validTicks++;
-            }
-        }
-
-        if (validTicks == 0) return 20.0;
-
-        double averageTickTime = (double) totalTime / validTicks;
-        return Math.min(20.0, 1_000_000_000.0 / averageTickTime); // Convert nanoseconds to TPS
+        double[] tps = org.bukkit.Bukkit.getTPS();
+        return tps[0];
     }
 
     /**

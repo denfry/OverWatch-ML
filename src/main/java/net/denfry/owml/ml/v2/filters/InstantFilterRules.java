@@ -14,26 +14,23 @@ public class InstantFilterRules {
      * Возвращает количество очков подозрения, которые нужно добавить.
      */
     public static int evaluateXray(boolean decoyTouched, double lookDeviationDegrees, 
-                                   int visibleOresBypassed, double oreToStoneRatio, double serverNormRatio) {
+                                   int visibleOresBypassed, double oreToStoneRatio, 
+                                   double serverNormRatio, double adjustedOreRatioThreshold) {
         int points = 0;
 
-        // decoy_ore_touched дает немедленный флаг высокой уверенности (перехватывается в другом месте, но здесь тоже можно дать макс)
         if (decoyTouched) {
             points += 100; 
         }
 
-        // Игрок копал строго по вектору к скрытой руде с отклонением менее 15 градусов
         if (lookDeviationDegrees < 15.0) {
             points += 40;
         }
 
-        // Игрок прошёл мимо трёх и более видимых руд но нашёл скрытые
         if (visibleOresBypassed >= 3) {
             points += 30;
         }
 
-        // Отношение найденной руды к сломанному камню за сессию превышает 15% при норме 2%
-        if (oreToStoneRatio > 0.15 && serverNormRatio < 0.05) {
+        if (oreToStoneRatio > adjustedOreRatioThreshold && serverNormRatio < 0.05) {
             points += 35;
         }
 

@@ -7,6 +7,7 @@ import net.denfry.owml.ml.v2.pipeline.DetectionPipeline;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -15,6 +16,8 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 import org.bukkit.util.Vector;
 
 import java.util.Map;
@@ -25,7 +28,6 @@ public class MLDataListener implements Listener {
     private final OverWatchML plugin;
     private final DetectionPipeline pipeline;
 
-    // РЎС‚РµР№С‚-С‚СЂРµРєРµСЂС‹ РґР»СЏ СЃР±РѕСЂР° С„РёС‡РµР№
     private final Map<UUID, PlayerSessionState> sessionStates = new ConcurrentHashMap<>();
 
     public MLDataListener(OverWatchML plugin, DetectionPipeline pipeline) {
@@ -48,54 +50,106 @@ public class MLDataListener implements Listener {
         if (isOre(block.getType())) {
             state.oresFound++;
             
-            // XRAY FEATURE EXTRACTION
             double[] features = new double[32];
             long now = System.currentTimeMillis();
             
-            // 1. Р’СЂРµРјРµРЅРЅС‹Рµ РїСЂРёР·РЅР°РєРё
             double timeSinceLastOre = (now - state.lastOreTime) / 1000.0;
             features[0] = timeSinceLastOre;
-            features[1] = state.oresFound / (Math.max(1, (now - state.sessionStart) / 60000.0)); // Ores per min
+            features[1] = state.oresFound / (Math.max(1, (now - state.sessionStart) / 60000.0));
             
-            // 2. Spatial features
             double dist = 0;
             if (state.lastOreLoc != null && state.lastOreLoc.getWorld() != null && 
                 state.lastOreLoc.getWorld().equals(block.getWorld())) {
                 dist = block.getLocation().distance(state.lastOreLoc);
             }
             features[2] = dist;
-            features[3] = block.getY(); // Y-level variance can be calculated later, storing Y for now
+            features[3] = block.getY();
             
-            // 3. Ore-specific
             double oreRatio = (double) state.oresFound / Math.max(1, state.blocksBroken);
             features[4] = oreRatio;
             
-            // 4. Server context normalization
             pipeline.serverContext.updateServerOreRatio(oreRatio);
-            double zScore = pipeline.serverContext.getZScore(oreRatio, pipeline.serverContext.getServerOreRatio(), 0.05); // pseudo std-dev
+            double zScore = pipeline.serverContext.getZScore(oreRatio, pipeline.serverContext.getServerOreRatio(), 0.05);
             features[5] = zScore;
 
-            // ... РѕСЃС‚Р°Р»СЊРЅР°СЏ 32-РјРµСЂРЅР°СЏ Р»РѕРіРёРєР° Р·Р°РїРѕР»РЅСЏРµС‚СЃСЏ 0.0 РєР°Рє РґРµС„РѕР»С‚РЅС‹РјРё Р·РЅР°С‡РµРЅРёСЏРјРё РґР»СЏ РїСЂРёРјРµСЂР°
-            // Р’ СЂРµР°Р»СЊРЅРѕРј РїСЂРѕРґРµ Р·РґРµСЃСЊ РёРґРµС‚ Р·Р°РїРѕР»РЅРµРЅРёРµ РІСЃРµС… 32 С„РёС‡.
-
-            // TIER 1: INSTANT FILTER
             boolean isDecoy = plugin.getContext().getDecoyService().isDecoy(block.getLocation());
+            double lookDeviationDegrees = calculateLookDeviation(player, block);
+            int visibleOresBypassed = countVisibleOresBypassed(player, block);
+            double effectiveMiningSpeed = calculateEffectiveMiningSpeed(player);
+            
+            double adjustedOreRatioThreshold = 0.15;
+            if (effectiveMiningSpeed >= 3.0) {
+                adjustedOreRatioThreshold = 0.35;
+            }
+            if (effectiveMiningSpeed >= 5.0) {
+                adjustedOreRatioThreshold = 0.50;
+            }
+            
             int points = InstantFilterRules.evaluateXray(
                 isDecoy,
-                10.0, // Look deviation mock
-                0, // Bypassed ores mock
+                lookDeviationDegrees,
+                visibleOresBypassed,
                 oreRatio,
-                pipeline.serverContext.getServerOreRatio()
+                pipeline.serverContext.getServerOreRatio(),
+                adjustedOreRatioThreshold
             );
 
             pipeline.processInstantFilter(player, CheatCategory.XRAY, points, "BlockBreak Rules");
 
-            // TIER 2: TEMPORAL ANOMALY
             pipeline.triggerTemporalAnalysis(player, CheatCategory.XRAY, features);
 
             state.lastOreTime = now;
             state.lastOreLoc = block.getLocation();
         }
+    }
+
+    private double calculateLookDeviation(Player player, Block targetBlock) {
+        Location eyeLocation = player.getEyeLocation();
+        Vector lookDirection = eyeLocation.getDirection();
+        Vector directionToBlock = targetBlock.getLocation().add(0.5, 0.5, 0.5).toVector().subtract(eyeLocation.toVector()).normalize();
+        
+        double angleRadians = lookDirection.angle(directionToBlock);
+        return Math.toDegrees(angleRadians);
+    }
+
+    private int countVisibleOresBypassed(Player player, Block brokenBlock) {
+        int count = 0;
+        Block playerBlock = player.getLocation().getBlock();
+        
+        BlockFace[] faces = {BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST, BlockFace.UP, BlockFace.DOWN};
+        
+        for (BlockFace face : faces) {
+            for (int i = 1; i <= 5; i++) {
+                Block checkBlock = playerBlock.getRelative(face, i);
+                if (isOre(checkBlock.getType()) && !checkBlock.getLocation().equals(brokenBlock.getLocation())) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    private double calculateEffectiveMiningSpeed(Player player) {
+        double baseSpeed = 1.0;
+        
+        org.bukkit.inventory.ItemStack item = player.getInventory().getItemInMainHand();
+        if (item != null && item.hasItemMeta()) {
+            Map<org.bukkit.enchantments.Enchantment, Integer> enchantments = item.getItemMeta().getEnchants();
+            for (Map.Entry<org.bukkit.enchantments.Enchantment, Integer> entry : enchantments.entrySet()) {
+                if (entry.getKey().getKey().getKey().equals("efficiency")) {
+                    baseSpeed += entry.getValue();
+                    break;
+                }
+            }
+        }
+        
+        for (PotionEffect effect : player.getActivePotionEffects()) {
+            if (effect.getType().getKey().getKey().equals("haste")) {
+                baseSpeed += (effect.getAmplifier() + 1) * 0.5;
+            }
+        }
+        
+        return baseSpeed;
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -113,14 +167,12 @@ public class MLDataListener implements Listener {
 
         double distance = attacker.getLocation().distance(target.getLocation());
         int ping = attacker.getPing();
-        double maxReach = 3.0; // Base reach
+        double maxReach = 3.0;
 
-        // TIER 1: INSTANT FILTER
         Vector eyeToTarget = target.getLocation().toVector().subtract(attacker.getEyeLocation().toVector());
         Vector lookDirection = attacker.getEyeLocation().getDirection();
         float angleDiff = lookDirection.angle(eyeToTarget);
         
-        // РџСЂРёРјРµСЂ: СѓРіРѕР» РїРѕРІРѕСЂРѕС‚Р° РіРѕР»РѕРІС‹ РІ С‚РёРєРµ (Р·РґРµСЃСЊ Р·Р°РіР»СѓС€РєР° РґР»СЏ deltaYaw)
         double deltaYaw = Math.abs(attacker.getLocation().getYaw() - state.lastYaw);
 
         int points = InstantFilterRules.evaluateCombat(
@@ -129,12 +181,11 @@ public class MLDataListener implements Listener {
         
         pipeline.processInstantFilter(attacker, CheatCategory.COMBAT_MOVEMENT, points, "Combat Rules");
 
-        // COMBAT FEATURE EXTRACTION (40 features)
         double[] features = new double[40];
         features[0] = angleDiff;
         features[1] = distance;
         features[2] = ping;
-        features[3] = (now - state.lastAttackTime); // TTK/Attack speed
+        features[3] = (now - state.lastAttackTime);
         features[4] = deltaYaw;
         features[5] = state.speed;
 
@@ -151,12 +202,11 @@ public class MLDataListener implements Listener {
 
         state.lastYaw = event.getFrom().getYaw();
         
-        // Movement tracking
         double dx = event.getTo().getX() - event.getFrom().getX();
         double dz = event.getTo().getZ() - event.getFrom().getZ();
         state.speed = Math.sqrt(dx * dx + dz * dz);
         
-        if (!((org.bukkit.entity.Entity) player).isOnGround()) {
+        if (!player.isOnGround()) {
             state.ticksInAir++;
         } else {
             state.ticksInAir = 0;
@@ -166,16 +216,12 @@ public class MLDataListener implements Listener {
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         sessionStates.remove(event.getPlayer().getUniqueId());
-        // РџСЂРѕС„РёР»СЊ РЅРµ СѓРґР°Р»СЏРµРј СЃСЂР°Р·Сѓ РёР· РїР°Р№РїР»Р°Р№РЅР°, С‚Р°Рє РєР°Рє РјРѕР¶РµС‚ РёРґС‚Рё РѕС‚Р»РѕР¶РµРЅРЅС‹Р№ Р°РЅР°Р»РёР·
     }
 
     private boolean isOre(Material type) {
         return type.name().endsWith("_ORE") || type.name().equals("ANCIENT_DEBRIS");
     }
 
-    /**
-     * Р›РѕРєР°Р»СЊРЅС‹Р№ СЃС‚РµР№С‚ РёРіСЂРѕРєР° РґР»СЏ СЃР±РѕСЂР° С„РёС‡РµР№, РЅРµ СЏРІР»СЏРµС‚СЃСЏ РїРѕСЃС‚РѕСЏРЅРЅС‹Рј ML РїСЂРѕС„РёР»РµРј
-     */
     private static class PlayerSessionState {
         UUID uuid;
         long sessionStart = System.currentTimeMillis();

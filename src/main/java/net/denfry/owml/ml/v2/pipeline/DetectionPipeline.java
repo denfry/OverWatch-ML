@@ -217,9 +217,12 @@ public class DetectionPipeline {
 
     private void triggerPunishment(Player player, CheatCategory category, String reason) {
         plugin.getServer().getScheduler().runTask(plugin, () -> {
-            plugin.getLogger().warning("[OverWatch ML] PUNISHING " + player.getName() + " for " + category + ": " + reason);
-            // Link to actual punishment manager
-            plugin.getPunishmentManager().setPunishmentLevel(player, 3); // Example
+            if (plugin.getConfig().getBoolean("ml.flag-only", true)) {
+                plugin.getLogger().warning("[OverWatch ML] FLAG: " + player.getName() + " for " + category + ": " + reason);
+            } else {
+                plugin.getLogger().warning("[OverWatch ML] PUNISHING " + player.getName() + " for " + category + ": " + reason);
+                plugin.getPunishmentManager().setPunishmentLevel(player, 3);
+            }
         });
     }
     

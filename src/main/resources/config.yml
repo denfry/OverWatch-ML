@@ -1,86 +1,46 @@
+# OverWatch-ML Configuration File
+
+# Debug mode - enables verbose logging
 debug:
-  enabled: false # Set to true to enable debug logging, false to disable
+  enabled: false
 
 # Auto-update settings
 check-for-updates: false
 notify-admins-on-join: true
-resource-id: 0  # SpigotMC resource ID
-modrinth-id: ""  # Modrinth project ID
+modrinth-id: ""
 
 # Periodic update checking configuration
 periodic-update-checks:
-  # Whether to automatically check for updates periodically
   enabled: true
-  # How often to check for updates (in hours)
   interval-hours: 24
 
 # Auto-updates settings
 auto-updates:
-  # Whether to allow automatic updates when triggered by staff
   enabled: true
-  # Whether to enable hot-reload if plugin management plugins are available
-  hot-reload-enabled: true
-  # Backup old plugin file before updating
-  backup-old-file: true
-  # Show download progress to players
-  show-download-progress: true
 
-# Update sources (order matters - first available will be used)
-update-sources:
-  enabled:
-    - MODRINTH
-    - SPIGOT
-    - SPIGET
-    - POLYMART
-  # Fallback timeout in seconds
-  fallback-timeout: 30
+# ============= ANTI-XRAY SYSTEM =============
 
-# Anti-Xray Plugin Configuration File
-
+# Decoy ore system - places fake ores to catch xrayers
 decoy:
-  # Global switch for enabling/disabling the decoy system
   enabled: true
-
-  # Number of natural ores a player can mine within the time window before a decoy is triggered
   oreThreshold: 10
-
-  # Time window duration in ticks (1200 ticks = 1 minute)
   timeWindowTicks: 3600
-
-  # Distance from the mined block where the decoy ore is placed
   distance: 5.0
-
-  # Additional perpendicular offset to better hide the decoy block
   fieldOffset: 0.5
-
-  # Only place decoys if the candidate location is fully surrounded by solid blocks
   requireBuried: true
-
-  # Warn the player when they break a decoy ore
   warnOnDecoy: false
-
-  # Delay (in ticks) before a decoy ore is reverted (1200 ticks = 60 seconds)
   revertDelay: 1200
-
-  # Maximum allowed distance (in blocks) from the player for the decoy ore before it is reverted
   maxDistance: 10.0
-
-  # Radius to search for a buried location
   searchRadius: 10
-  # Buried Threshold (Number of solid adjacent blocks required for a location to be considered "buried")
   buriedThreshold: 6
 
-
+# Staff alerts for ore mining
 staff:
-  # Enable alerts to staff for each natural ore mined by a player
   oreAlerts: true
-
-  # Time (in ticks) after which the ore counter for a player resets (36000 ticks = 30 minutes)
   oreResetTime: 36000
-
-  # Alert staff when a decoy ore is broken
   alertEnabled: true
 
+# Natural ores that trigger anti-xray
 ores:
   natural:
     - DIAMOND_ORE
@@ -90,9 +50,13 @@ ores:
     - EMERALD_ORE
     - DEEPSLATE_EMERALD_ORE
 
+# ============= PUNISHMENT SYSTEM =============
 
+# Enable/disable automatic punishments per level
+# Set to false to disable punishment for that level
+# Level 0 = no action, Level 1-6 = escalating punishments
 punishment:
-  levels:
+  enabled:
     1: false
     2: false
     3: false
@@ -100,117 +64,89 @@ punishment:
     5: false
     6: false
 
-# WARNING: DO NOT MODIFY ANY VALUES IN THIS SECTION UNLESS YOU FULLY UNDERSTAND THE CONSEQUENCES
-# NEVER CHANGE THE trainingSessionDuration AS ALL MACHINE LEARNING DATA IS CALIBRATED BASED ON THIS VALUE
-# CHANGING THESE VALUES MAY BREAK THE DETECTION SYSTEM OR CAUSE FALSE POSITIVES/NEGATIVES
+  autoSave:
+    enabled: true
+    intervalMinutes: 10
+    logging: true
+
+# ============= MACHINE LEARNING DETECTION =============
+
+# ML-based detection system
 ml:
   enabled: true
+  # Flag-only mode: when true, only notifies staff but does NOT apply punishments
+  flag-only: true
   trainingSessionDuration: 600
   detectionThreshold: 0.75
   positionUpdateInterval: 20
+  min-data-points: 50
+
+  thresholds:
+    warning: 60
+    auto-punish: 90
+
   autoAnalysis:
     enabled: true
     suspiciousThreshold: 15
     maxPlayers: 5
 
-  # Bot training system settings
+  # Bot training system (for development/testing)
   bots:
-    # Enable automatic bot spawning for ML training
     autoTraining: false
-    # Maximum number of concurrent training bots
     maxConcurrentBots: 5
-    # Duration of each training session in seconds
     trainingSessionDuration: 120
-    # Interval between automatic bot spawns in seconds
     spawnInterval: 30
 
+# Automation settings
+automation:
+  auto-punish:
+    enabled: false
+    type: "KICK"
+
+# Performance settings
+performance:
+  analysis-interval: 100
+  max-queue: 20
 
 # World-specific settings
-# Disable anti-xray checks in specific worlds
 disabled-worlds:
-  enabled: false  # Set to true to enable world-specific disabling
-  worlds: []  # List of world names where checks should be disabled (e.g. ["world_nether", "creative_world"])
+  enabled: false
+  worlds: []
 
 # Storage settings
 storage:
-  type: yaml  # Options: yaml, sqlite
-  # yaml - File-based storage (default, backward compatible)
-  # sqlite - Database storage (faster, recommended for large servers)
+  type: yaml
 
 # Language settings
-language: en  # Language code for messages (en, ru, etc.)
+language: en
 
-# Command hiding settings
-# When enabled, players without the "owml.use" permission will see "Unknown command"
-# instead of "No permission" when attempting to use plugin commands
-# NOTE: Changes to this setting require a server restart to take effect!!!!
-command-hiding:
-  enabled: false  # Set to true to enable command hiding
-  messages:
-    error-line1: "§cUnknown or incomplete command, see below for error"
-    error-line2: "§c§n{command}§r§c§o<--[HERE]"
-    # You can use {command} to insert the command label
-    # Color codes are supported using § symbol
+# ============= INTEGRATIONS =============
 
-# Admin panel settings
-# WARNING: Web admin panel WILL NOT WORK on most Minecraft hosting providers!
-# Most shared hosting services (Aternos, Apex, etc.) do not allow opening additional ports.
-# This feature only works on VPS/Dedicated servers where you control the firewall.
-admin-panel:
-  enabled: false  # Set to true to enable web admin panel (NOT recommended for shared hosting)
-  port: 8080  # Port for the web interface (must be opened in your firewall)
-  # Access at http://your-server-ip:8080
-  # If on shared hosting, this will fail to start - this is normal and expected
-
-# Discord integration settings
+# Discord integration
 integrations:
   discord:
-    enabled: false  # Set to true to enable Discord bot
-    bot-token: "YOUR_BOT_TOKEN_HERE"  # Discord bot token
-    notification-channel: "123456789012345678"  # Channel ID for notifications
-    command-channel: "123456789012345678"  # Channel ID for commands (optional)
-    alert-level: "HIGH"  # Minimum alert level to send to Discord (SAFE, LOW, MEDIUM, HIGH, CRITICAL)
+    enabled: false
+    bot-token: "YOUR_BOT_TOKEN_HERE"
+    notification-channel: "123456789012345678"
+    command-channel: "123456789012345678"
+    alert-level: "HIGH"
 
   anticheat:
-    enabled: true  # Enable anti-cheat integrations
+    enabled: true
     aac:
-      enabled: true  # Enable AAC integration
+      enabled: true
     nocheatplus:
-      enabled: true  # Enable NoCheatPlus integration
+      enabled: true
 
-# Advanced detection settings
-advanced-detection:
-  enabled: true  # Enable advanced multi-layered detection
-  behavioral-analysis:
-    enabled: true
-    sensitivity: 0.7  # Detection sensitivity (0.0-1.0)
-  pattern-recognition:
-    enabled: true
-    tunnel-detection: true
-    branch-detection: true
-    strip-detection: true
-  anomaly-detection:
-    enabled: true
-    z-score-threshold: 2.0
-  multi-account-detection:
-    enabled: true
-    ip-tracking: true
-  path-prediction:
-    enabled: true
-
-# Online learning settings
-online-learning:
-  enabled: true
-  learning-rate: 0.01
-  adaptive-learning: true
-  retrain-interval: 30  # Minutes between model retraining
-
-# Performance monitoring
-performance-monitoring:
-  enabled: true
-  metrics-interval: 100  # Ticks between metric collection
-  memory-threshold: 80  # Memory usage alert threshold (%)
-  tps-threshold: 15.0  # TPS alert threshold
+# Webhook integration
+webhook:
+  url: ""
+  alerts:
+    xray_detection: true
+    suspicious_mining: true
+    punishment_applied: true
+    staff_actions: false
+    appeal_updates: true
 
 # Composite punishment system
 composite-punishments:
@@ -218,212 +154,25 @@ composite-punishments:
   escalation-enabled: true
   max-level: 6
 
-# Data export settings
-data-export:
-  enabled: true
-  auto-export: false
-  export-interval: 24  # Hours between automatic exports
-  formats: ["JSON", "CSV"]  # Available formats: JSON, CSV, XML
-  compress-exports: true
+# ============= DATA MANAGEMENT =============
 
-# Audit logging
-audit-logging:
-  enabled: true
-  log-level: "INFO"  # Minimum log level (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)
-  retention-days: 30  # Days to keep audit logs
-  compress-old-logs: true
+# Stats auto-save settings
+stats:
+  autoSave:
+    enabled: true
+    intervalMinutes: 10
+    logging: false
 
-# Security settings
-security:
-  encryption-enabled: true
-  secure-tokens: true
-  log-sensitive-actions: true
+# Suspicious players auto-save settings
+suspicious:
+  autoSave:
+    enabled: true
+    intervalMinutes: 10
+    logging: true
 
-# ===== ADVANCED FEATURES =====
-
-# Behavioral Profiling System
-behavioral-profiling:
-  enabled: true
-  # Analysis intervals
-  analysis-interval-ticks: 1200  # Every minute
-  # Profile retention
-  max-profile-age-days: 90
-  # Anomaly detection thresholds
-  anomaly-thresholds:
-    mining: 0.7
-    temporal: 0.6
-    movement: 0.8
-    social: 0.5
-  # Feature weights for analysis
-  feature-weights:
-    mining_speed: 1.0
-    ore_distribution_uniformity: 0.8
-    pattern_consistency: 0.9
-    session_duration: 0.6
-    idle_time_ratio: 0.7
-
-# Adaptive Punishment System
-adaptive-punishments:
-  enabled: true
-  # Learning parameters
-  learning-rate: 0.1
-  adaptation-rate: 0.05
-  # Effectiveness tracking
-  track-effectiveness: true
-  effectiveness-window-days: 30
-  # Context sensitivity
-  context-sensitivity: 1.2
-  # Forgiveness for good behavior
-  forgiveness-factor: 0.8
-  # Escalation for repeat offenders
-  escalation-factor: 1.5
-  # Minimum history for adaptation
-  min-history-size: 3
-
-# Interactive Command System
-interactive-commands:
-  enabled: true
-  # Help system
-  show-help-on-error: true
-  clickable-suggestions: true
-  # Auto-completion
-  smart-completion: true
-  show-command-history: true
-  # Validation
-  strict-validation: true
-  show-validation-hints: true
-  # User preferences
-  remember-user-preferences: true
-  max-command-history: 50
-
-# Advanced ML Features
-advanced-ml:
-  enabled: true
-  # Ensemble detection
-  ensemble-enabled: true
-  ensemble-threshold: 0.6
-  # Isolation Forest
-  isolation-trees: 100
-  isolation-max-height: 10
-  # Autoencoder
-  autoencoder-enabled: true
-  autoencoder-hidden-size: 64
-  autoencoder-bottleneck-size: 32
-  autoencoder-learning-rate: 0.001
-  # Feature engineering
-  feature-engineering-enabled: true
-  polynomial-degree: 3
-  temporal-window-size: 5
-  # Pattern learning
-  pattern-learning-enabled: true
-  min-pattern-samples: 50
-  max-synthetic-samples: 1000
-
-# Context-Aware Detection
-context-aware-detection:
-  enabled: true
-  # Time-based factors
-  time-sensitivity: 1.1
-  peak-hours-multiplier: 1.2
-  off-hours-leniency: 0.9
-  # Server state factors
-  player-count-sensitivity: 1.0
-  tps-impact-factor: 1.3
-  # Environmental factors
-  weather-impact: 0.05
-  biome-modifiers:
-    cave-biomes: 1.1
-    surface-biomes: 0.9
-  # Social context
-  group-size-factor: 0.8
-  interaction-frequency-weight: 0.6
-
-# Fraud Detection System
-fraud-detection:
-  enabled: true
-  # Bot detection
-  bot-detection-enabled: true
-  pattern-analysis-depth: 10
-  timing-precision-threshold: 0.01
-  # Account analysis
-  multi-account-detection: true
-  similarity-threshold: 0.85
-  ip-analysis-enabled: true
-  # Behavioral anomalies
-  macro-detection-enabled: true
-  automation-pattern-threshold: 0.9
-  # Network analysis
-  connection-pattern-analysis: true
-  vpn-detection-enabled: false  # Requires additional setup
-
-# Data Management & Optimization
-data-optimization:
-  enabled: true
-  # Compression settings
-  compression-enabled: true
-  compression-level: 6  # 1-9, higher = better compression but slower
-  # Deduplication
-  deduplication-enabled: true
-  similarity-threshold: 0.95
-  # Archival
-  archival-enabled: true
-  archive-after-days: 30
-  max-archive-size-mb: 100
-  max-archives-keep: 50
-  # Memory optimization
-  memory-optimization-enabled: true
-  max-ml-memory-mb: 256
-  cache-cleanup-interval-minutes: 5
-  # Cleanup
-  auto-cleanup-enabled: true
-  cleanup-interval-hours: 24
-  max-data-age-days: 90
-  min-quality-threshold: 0.3
-
-# Performance & Monitoring
-advanced-monitoring:
-  enabled: true
-  # Real-time metrics
-  realtime-metrics-enabled: true
-  metrics-update-interval-ticks: 100
-  # Performance monitoring
-  performance-tracking-enabled: true
-  tps-impact-monitoring: true
-  memory-usage-tracking: true
-  # Alert thresholds
-  alert-thresholds:
-    tps-drop: 0.5
-    memory-usage-percent: 85
-    detection-queue-size: 1000
-  # Dashboard integration
-  web-dashboard-enabled: true
-  api-endpoints-enabled: true
-  metrics-export-enabled: false
-
-# Integration Settings
-advanced-integrations:
-  enabled: true
-  # Discord enhancements
-  discord-advanced-features: true
-  embed-rich-analytics: true
-  real-time-alerts: true
-  # Web panel enhancements
-  web-panel-advanced-ui: true
-  interactive-charts: true
-  live-player-monitoring: true
-  # API enhancements
-  rest-api-advanced: true
-  graphql-support: false  # Future feature
-  webhook-enhancements: true
-
-# Experimental Features (Use with caution)
-experimental:
-  enabled: false  # Set to true to enable experimental features
-  # Neural networks for pattern recognition
-  neural-pattern-recognition: false
-  # Advanced behavioral biometrics
-  behavioral-biometrics: false
-  # Reinforcement learning for thresholds
-  adaptive-thresholds-rl: false
-  # Federated learning across servers
-  federated-learning: false
+# Command hiding - shows "Unknown command" instead of "No permission"
+command-hiding:
+  enabled: false
+  messages:
+    error-line1: "§cUnknown or incomplete command, see below for error"
+    error-line2: "§c§n{command}§r§c§o<--[HERE]"
