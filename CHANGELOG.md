@@ -5,6 +5,18 @@ All notable changes to OverWatch-ML will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1] - 2026-03-18
+
+### Fixed
+- **XRAY False Positives**: Improved XRAY detection to properly account for tool efficiency (efficiency enchantment) and Haste potion effects. Players with Efficiency V pickaxes and Haste II are no longer falsely flagged.
+- **TPS Measurement**: Fixed critical TPS calculation error that showed incorrect values (1.0 TPS) due to custom calculation issues. Now uses reliable `Bukkit.getTPS()` API.
+
+### Features
+- **Flag-Only Mode**: Added `ml.flag-only` config option. When enabled, ML detections only notify staff without applying automatic punishments. Useful for testing or servers that want manual punishment review.
+
+### Changed
+- **Config Cleanup**: Removed unused configuration sections (web admin panel, advanced-detection, online-learning, performance-monitoring, audit-logging) and added missing options. Config is now cleaner and more organized.
+
 ## [2.2.0] - 2026-03-18
 
 ### Fixed
