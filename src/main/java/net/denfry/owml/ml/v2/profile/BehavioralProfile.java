@@ -51,17 +51,12 @@ public class BehavioralProfile {
      * Adapts a base threshold based on the player's historical trust level.
      */
     public double getAdaptiveThreshold(double baseThreshold) {
-        // High trust -> higher threshold (harder to flag)
-        // Low trust (new player or suspicious) -> lower threshold (easier to flag)
-        
-        // Give new players a "grace period" or strict period? 
-        // Typically, new players are untrusted (trust ~0.5).
-        
-        double trustFactor = 1.0 + (bayesianTrust - 0.5); // ranges from 0.5 to 1.5
+        // Trust factor capped at ±0.2 of base to prevent warm-up abuse:
+        // fully trusted player gets at most baseThreshold * 1.2 (not 1.5)
+        // suspicious player gets at most baseThreshold * 0.8
+        double trustFactor = 1.0 + ((bayesianTrust - 0.5) * 0.4); // ranges from 0.8 to 1.2
         double adapted = baseThreshold * trustFactor;
-        
-        // Cap thresholds to logical bounds
-        return Math.min(0.99, Math.max(0.50, adapted));
+        return Math.min(0.95, Math.max(0.50, adapted));
     }
 
     public void addXrayEvent(double[] features) {

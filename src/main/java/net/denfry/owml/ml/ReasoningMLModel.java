@@ -163,6 +163,11 @@ public class ReasoningMLModel {
             finalScore += weights[i] * scores[i];
         }
 
+        // Ore efficiency check: not discountable by MiningStyle
+        double efficiencyOverride = calculateOreEfficiencyOverride(features);
+        if (efficiencyOverride > 0.0) {
+            finalScore = Math.max(finalScore, efficiencyOverride);
+        }
 
         StringBuilder conclusion = new StringBuilder();
 
@@ -214,6 +219,37 @@ public class ReasoningMLModel {
         }
 
         return new DetectionResult(finalScore, conclusion.toString(), reasoningSteps);
+    }
+
+    /**
+     * Non-discountable check: diamonds-per-block efficiency.
+     * A branch miner at diamond level finds ~1-2 diamonds per 100 blocks.
+     * X-ray precision (5+ per 100 blocks) cannot be excused by any mining style.
+     */
+    private double calculateOreEfficiencyOverride(Map<String, Double> features) {
+        Double totalBlocks = features.get("total_blocks_broken");
+        if (totalBlocks == null || totalBlocks < 100) return 0.0;
+
+        double diamonds = features.getOrDefault("ore_count_diamond_ore", 0.0)
+                        + features.getOrDefault("ore_count_deepslate_diamond_ore", 0.0);
+        double debris = features.getOrDefault("ore_count_ancient_debris", 0.0);
+
+        double diamondsPerHundred = diamonds / totalBlocks * 100.0;
+        double debrisPerHundred   = debris   / totalBlocks * 100.0;
+
+        double overrideScore = 0.0;
+
+        // Normal branch miner: ~1-2 diamonds per 100 blocks; 4+ is already very high
+        if (diamondsPerHundred > 4.0) {
+            overrideScore = Math.max(overrideScore, Math.min(0.95, 0.50 + (diamondsPerHundred - 4.0) * 0.05));
+        }
+
+        // Ancient debris: ~0.2-0.5 per 100 blocks via branch mining; 1.5+ is suspicious
+        if (debrisPerHundred > 1.5) {
+            overrideScore = Math.max(overrideScore, Math.min(0.95, 0.55 + (debrisPerHundred - 1.5) * 0.08));
+        }
+
+        return overrideScore;
     }
 
     /**
@@ -271,7 +307,7 @@ public class ReasoningMLModel {
             }
 
 
-            likelyXray = oreRatio > 15 && focusedOnValuableOre && suspiciousDiamondRate > 0.7;
+            likelyXray = oreRatio > 10 && focusedOnValuableOre && suspiciousDiamondRate > 0.55;
         }
 
 
@@ -415,11 +451,10 @@ public class ReasoningMLModel {
 
 
         if (style == MiningStyle.BRANCH_MINER) {
-
-            suspicionScore = Math.max(0, suspicionScore - 0.4);
+            suspicionScore = Math.max(0, suspicionScore - 0.15);
 
             if (blocksBroken > stats.normalMean && blocksBroken < stats.normalMean * 2) {
-                suspicionScore = Math.max(0, suspicionScore - 0.2);
+                suspicionScore = Math.max(0, suspicionScore - 0.05);
             }
         }
 
@@ -491,15 +526,12 @@ public class ReasoningMLModel {
 
 
         if (style == MiningStyle.BRANCH_MINER) {
-
-
             if (oreRatio < 8) {
-                suspicionScore = Math.max(0, suspicionScore - 0.3);
+                suspicionScore = Math.max(0, suspicionScore - 0.12);
             }
         } else if (style == MiningStyle.CAVE_MINER) {
-
             if (oreRatio < 12) {
-                suspicionScore = Math.max(0, suspicionScore - 0.3);
+                suspicionScore = Math.max(0, suspicionScore - 0.12);
             }
         }
 
@@ -579,12 +611,10 @@ public class ReasoningMLModel {
 
 
         if (style == MiningStyle.BRANCH_MINER && focusRatio > 70 && focusRatio < 95) {
-
-
             if (features.containsKey("most_common_y_level")) {
                 double yLevel = features.get("most_common_y_level");
                 if (yLevel >= -59 && yLevel <= -50) {
-                    suspicionScore = Math.max(0, suspicionScore - 0.4);
+                    suspicionScore = Math.max(0, suspicionScore - 0.15);
                 }
             }
         }
@@ -666,17 +696,12 @@ public class ReasoningMLModel {
 
 
             if (style == MiningStyle.BRANCH_MINER && rateKey.contains("diamond")) {
-
-
                 if (rateValue > rateStats.normalMean && rateValue < rateStats.cheaterMean * 0.7) {
-                    suspicionScore = Math.max(0, suspicionScore - 0.3);
+                    suspicionScore = Math.max(0, suspicionScore - 0.10);
                 }
             } else if (style == MiningStyle.CAVE_MINER) {
-
-
                 if (rateKey.contains("1min") && rateValue > rateStats.normalMean * 1.5) {
-
-                    suspicionScore = Math.max(0, suspicionScore - 0.2);
+                    suspicionScore = Math.max(0, suspicionScore - 0.10);
                 }
             }
 
@@ -762,10 +787,8 @@ public class ReasoningMLModel {
 
 
             if (style == MiningStyle.BRANCH_MINER) {
-
-
                 if (distance > 5.0 && distance < distanceStats.normalMean) {
-                    distanceSuspicion = Math.max(0, distanceSuspicion - 0.3);
+                    distanceSuspicion = Math.max(0, distanceSuspicion - 0.12);
                 }
             }
 
@@ -795,9 +818,7 @@ public class ReasoningMLModel {
 
 
             if (style == MiningStyle.BRANCH_MINER) {
-
-
-                yChangeSuspicion = Math.max(0, yChangeSuspicion - 0.5);
+                yChangeSuspicion = Math.max(0, yChangeSuspicion - 0.20);
             }
 
             overallSuspicionScore += yChangeSuspicion;
@@ -846,8 +867,7 @@ public class ReasoningMLModel {
 
 
             if (style == MiningStyle.BRANCH_MINER) {
-
-                varianceSuspicion = 0.0;
+                varianceSuspicion = Math.max(0, varianceSuspicion - 0.25);
             }
 
             overallSuspicionScore += varianceSuspicion;
@@ -872,8 +892,7 @@ public class ReasoningMLModel {
 
 
             if (style == MiningStyle.BRANCH_MINER) {
-
-                timeAtYSuspicion = 0.0;
+                timeAtYSuspicion = Math.max(0, timeAtYSuspicion - 0.20);
             }
 
             overallSuspicionScore += timeAtYSuspicion;

@@ -291,34 +291,41 @@ public class EnsembleDetector {
      * Calculate reasoning model score (simplified implementation)
      */
     private double calculateReasoningScore(Map<String, Double> features) {
-        // Simplified reasoning-based scoring
-        // In a full implementation, this would use the actual ReasoningMLModel
-
         double score = 0.0;
         int factors = 0;
 
-        // Check for suspicious patterns
-        Double miningSpeed = features.get("mining_speed");
-        if (miningSpeed != null && miningSpeed > 10.0) {
-            score += 0.3;
+        // Blocks per minute — derived from actual feature names
+        Double totalBlocks = features.get("total_blocks_broken");
+        double sessionDuration = features.getOrDefault("sessionDuration", 600.0);
+        if (totalBlocks != null && sessionDuration > 0) {
+            double blocksPerMin = totalBlocks / (sessionDuration / 60.0);
+            if (blocksPerMin > 60.0) score += 0.3;
             factors++;
         }
 
-        Double rareOres = features.get("rare_ores_found");
-        if (rareOres != null && rareOres > 5.0) {
+        // Rare ore count — use actual feature keys from PlayerMiningData
+        double diamonds = features.getOrDefault("ore_count_diamond_ore", 0.0)
+                        + features.getOrDefault("ore_count_deepslate_diamond_ore", 0.0);
+        double debris = features.getOrDefault("ore_count_ancient_debris", 0.0);
+        double rareOres = diamonds + debris;
+        if (rareOres > 5.0) {
             score += 0.2;
             factors++;
         }
 
-        Double patternConsistency = features.get("pattern_consistency");
-        if (patternConsistency != null && patternConsistency < 0.3) {
-            score += 0.4;
+        // Spatial consistency: high time at one Y + low variance + high rare ores = suspicious
+        Double percentAtY = features.get("percent_time_at_most_common_y");
+        Double yVariance = features.get("y_level_variance");
+        if (percentAtY != null && yVariance != null) {
+            boolean spatiallyLocked = percentAtY > 85.0 && yVariance < 15.0;
+            if (spatiallyLocked && rareOres > 3.0) score += 0.4;
             factors++;
         }
 
-        Double idleTime = features.get("idle_time_ratio");
-        if (idleTime != null && idleTime > 0.8) {
-            score += 0.3;
+        // Idle time: near-zero pauses between finds = no hesitation = suspicious
+        Double avgIdleTime = features.get("avg_idle_time_seconds");
+        if (avgIdleTime != null) {
+            if (avgIdleTime < 0.5) score += 0.3;
             factors++;
         }
 
