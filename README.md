@@ -8,6 +8,7 @@
 ![Paper](https://img.shields.io/badge/Paper-1.21-orange.svg)
 ![bStats Servers](https://img.shields.io/bstats/servers/29877?style=flat&logo=apache&color=informational)
 ![bStats Players](https://img.shields.io/bstats/players/29877?style=flat&logo=apache&color=informational)
+[![Discord](https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/mVZcNUAGZt)
 
 ## Overview
 
