@@ -45,6 +45,9 @@ public class AdvancedDetectionEngine implements Listener {
       this.patternEngine = new PatternRecognitionEngine();
       this.anomalyDetector = new AnomalyDetector();
       this.multiAccountDetector = new MultiAccountDetector();
+      // Off by default: official twinks (up to 5 per owner) share an IP by design, so "N accounts from one IP" was
+      // reported as CRITICAL for honest players.
+      this.multiAccountDetector.setEnabled(plugin.getConfig().getBoolean("detection.multi-account.enabled", false));
       this.pathPredictor = new PathPredictor();
       this.behavioralProfiler = new net.denfry.owml.detection.advanced.BehavioralProfiler();
       plugin.getServer().getPluginManager().registerEvents(this, plugin);

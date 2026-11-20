@@ -180,6 +180,29 @@ telemetry:
   enabled: true
   flush-minutes: 10
 
+# Автоматический сигнал иксрея: сколько скрытых жил игрок докопал на 100 блоков камня за окно.
+# Считаются только руды, до которых игрок дошёл своим тоннелем; руды в пещерах, у воды и в чужих тоннелях не считаются.
+# Жила считается один раз. Только алерт стаффу (owml.staff) и строка в telemetry/alerts, наказаний нет.
+# На main у активных шахтёров ~0.04 жилы на 100 камня; порог по умолчанию в 25 раз выше.
+xray-heuristic:
+  enabled: true
+  window-minutes: 180
+  min-stone: 150
+  min-veins: 3.0
+  veins-per-100-stone: 1.0
+  realert-minutes: 30
+  # Вес жилы по редкости (алмазы, обломки, изумруды — 1).
+  weights:
+    gold_ore: 0.25
+    deepslate_gold_ore: 0.25
+    lapis_ore: 0.2
+    deepslate_lapis_ore: 0.2
+
+# Мульти-аккаунты по IP: выключено — официальные твинки сидят с одного IP.
+detection:
+  multi-account:
+    enabled: false
+
 # Stats auto-save settings
 stats:
   autoSave:

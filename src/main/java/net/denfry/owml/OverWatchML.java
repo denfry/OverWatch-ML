@@ -195,6 +195,14 @@ public class OverWatchML extends JavaPlugin {
          this.getServer().getPluginManager().registerEvents(this.miningTelemetry, this);
          this.miningTelemetry.start(this.getConfig().getInt("telemetry.flush-minutes", 10));
       }
+
+      // Automatic x-ray signal: veins reached by digging per 100 stone (see XrayRatioTracker). Alerts staff only.
+      if (this.getConfig().getBoolean("xray-heuristic.enabled", true)) {
+         net.denfry.owml.detection.xray.XrayRatioListener xray = new net.denfry.owml.detection.xray.XrayRatioListener(
+            this, this.staffAlertManager, this.getConfig().getConfigurationSection("xray-heuristic"));
+         this.getServer().getPluginManager().registerEvents(xray, this);
+         Schedulers.asyncTimer(xray::cleanup, 20L * 600L, 20L * 600L);
+      }
    }
 
    private void setupCommands() {

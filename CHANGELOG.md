@@ -5,6 +5,28 @@ All notable changes to OverWatch-ML will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-11-20
+
+### Added
+- **Automatic x-ray signal** (`xray-heuristic`): veins a player reached by digging per 100 stone over a rolling 3 h
+  window. Ores exposed by caves, water or someone else's tunnel are not counted, a vein counts once. Staff alert with
+  teleport and a telemetry row only, no automatic punishment. Replayed against 16 days of CoreProtect logs from
+  Politernal main: at most 4 of 142 miners would have been flagged even counting every ore as hidden.
+
+### Changed
+- **Multi-account detection is off by default** (`detection.multi-account.enabled`): official alt accounts share an IP,
+  which was reported as CRITICAL for honest players.
+
+### Notes
+- The ML analysis (`/owml ml analyze`) only runs when staff start it; it never ran automatically, hence
+  `Predictions=0` in the metrics log.
+
+## [2.2.2] - 2026-11-08
+
+### Changed
+- Folia/Tessera port (region and entity schedulers), ProtocolLib optional, Russian staff messages, mining telemetry.
+  Sources restored from the production jar on 2026-11-20.
+
 ## [2.2.1] - 2026-03-18
 
 ### Fixed
