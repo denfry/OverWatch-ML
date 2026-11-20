@@ -1,27 +1,26 @@
 package net.denfry.owml.ml;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
-import org.bukkit.Bukkit;
-import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
-import org.bukkit.event.block.BlockBreakEvent;
-import org.bukkit.event.player.PlayerMoveEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.scheduler.BukkitTask;
 import net.denfry.owml.OverWatchML;
 import net.denfry.owml.config.ConfigManager;
+import net.denfry.owml.detection.DetectionLevel;
+import net.denfry.owml.detection.DetectionResult;
+import net.denfry.owml.detection.DetectionType;
+import net.denfry.owml.detection.IDetectionEngine;
+import net.denfry.owml.managers.SuspiciousManager;
 import net.denfry.owml.ml.advanced.AdvancedFeatureEngineer;
 import net.denfry.owml.ml.advanced.AutoencoderAnomalyDetector;
 import net.denfry.owml.ml.advanced.EnsembleDetector;
@@ -29,617 +28,494 @@ import net.denfry.owml.ml.advanced.IsolationForest;
 import net.denfry.owml.ml.impl.AsyncAnalysisManager;
 import net.denfry.owml.ml.impl.PlayerDataCollectorAdapter;
 import net.denfry.owml.ml.impl.ReasoningMLModelAdapter;
+import net.denfry.owml.utils.Schedulers;
+import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 
-import net.denfry.owml.detection.IDetectionEngine;
-import net.denfry.owml.detection.DetectionResult;
-import net.denfry.owml.detection.DetectionLevel;
-import net.denfry.owml.detection.DetectionType;
-import java.util.concurrent.CompletableFuture;
-
-/**
- * Modern ML manager with best practices:
- * - Asynchronous processing
- * - Caching
- * - Performance monitoring
- * - Graceful degradation
- * - Modular architecture
- */
 public class ModernMLManager implements Listener, IDetectionEngine {
+   private final Logger logger;
+   private final OverWatchML plugin;
+   private final ConfigManager configManager;
+   private final MLConfig mlConfig;
+   private final MLExecutor executor;
+   private final MLModel model;
+   private final DataCollector dataCollector;
+   private final AnalysisManager analysisManager;
+   private final MLCache cache;
+   private final MLMetrics metrics;
+   private final PlayerDataCollector legacyDataCollector;
+   private final OnlineLearningManager onlineLearningManager;
+   private final PlayerClusteringEngine clusteringEngine;
+   private final AutoTrainer autoTrainer;
+   private final BotTrainingManager botTrainingManager;
+   private final EnsembleDetector ensembleDetector;
+   private final IsolationForest isolationForest;
+   private final AutoencoderAnomalyDetector autoencoder;
+   private final AdvancedFeatureEngineer featureEngineer;
+   private final Map<UUID, Schedulers.Task> trainingTasks = new ConcurrentHashMap<>();
+   private final Map<UUID, Long> trainingEndTimes = new ConcurrentHashMap<>();
+   private final Queue<UUID> autoAnalysisQueue = new ConcurrentLinkedQueue<>();
+   private final Set<UUID> playersUnderAnalysis = Collections.newSetFromMap(new ConcurrentHashMap<>());
+   private final Map<UUID, ReasoningMLModel.DetectionResult> detectionResults = new ConcurrentHashMap<>();
+   private ScheduledFuture<?> cleanupTask;
+   private ScheduledFuture<?> metricsTask;
 
-    private final Logger logger;
-    private final OverWatchML plugin;
-    private final ConfigManager configManager;
-    private final MLConfig mlConfig;
+   public ModernMLManager(OverWatchML plugin, ConfigManager configManager) {
+      this.plugin = plugin;
+      this.configManager = configManager;
+      this.logger = plugin.getLogger();
+      this.executor = new MLExecutor(plugin);
+      this.cache = new MLCache();
+      this.metrics = new MLMetrics();
+      this.mlConfig = new MLConfig(plugin);
+      this.legacyDataCollector = new PlayerDataCollector(this.mlConfig);
+      ReasoningMLModel legacyModel = new ReasoningMLModel(plugin, this.mlConfig);
+      this.model = new ReasoningMLModelAdapter(legacyModel);
+      this.dataCollector = new PlayerDataCollectorAdapter(this.legacyDataCollector);
+      this.analysisManager = new AsyncAnalysisManager(this.executor, this.model, this.dataCollector, this.cache, this.metrics);
+      this.configureComponents(this.mlConfig);
+      this.onlineLearningManager = new OnlineLearningManager();
+      this.clusteringEngine = new PlayerClusteringEngine();
+      this.autoTrainer = new AutoTrainer();
+      this.botTrainingManager = new BotTrainingManager();
+      this.ensembleDetector = new EnsembleDetector();
+      this.isolationForest = new IsolationForest(100, 10, 0.6);
+      this.autoencoder = null;
+      this.featureEngineer = new AdvancedFeatureEngineer();
+      plugin.getServer().getPluginManager().registerEvents(this, plugin);
+      MLDataManager.initialize(plugin);
+      this.configureComponents(this.mlConfig);
+      this.startMaintenanceTasks();
+      this.initializeModel();
+      this.logger.info("Modern ML Manager initialized with async processing and caching");
+   }
 
-    // Core ML components with interfaces
-    private final MLExecutor executor;
-    private final MLModel model;
-    private final DataCollector dataCollector;
-    private final AnalysisManager analysisManager;
-    private final MLCache cache;
-    private final MLMetrics metrics;
-
-    // Legacy components for backward compatibility
-    private final PlayerDataCollector legacyDataCollector;
-
-    // Advanced ML components
-    private final OnlineLearningManager onlineLearningManager;
-    private final PlayerClusteringEngine clusteringEngine;
-    private final AutoTrainer autoTrainer;
-    private final BotTrainingManager botTrainingManager;
-    private final EnsembleDetector ensembleDetector;
-    private final IsolationForest isolationForest;
-    private final AutoencoderAnomalyDetector autoencoder;
-    private final AdvancedFeatureEngineer featureEngineer;
-
-    // Legacy compatibility fields
-    private final Map<UUID, BukkitTask> trainingTasks = new ConcurrentHashMap<>();
-    private final Map<UUID, Long> trainingEndTimes = new ConcurrentHashMap<>();
-    private final Queue<UUID> autoAnalysisQueue = new LinkedList<>();
-    private final Set<UUID> playersUnderAnalysis = Collections.newSetFromMap(new ConcurrentHashMap<>());
-    private final Map<UUID, ReasoningMLModel.DetectionResult> detectionResults = new ConcurrentHashMap<>();
-
-    // Maintenance tasks
-    private ScheduledFuture<?> cleanupTask;
-    private ScheduledFuture<?> metricsTask;
-
-    public ModernMLManager(OverWatchML plugin, ConfigManager configManager) {
-        this.plugin = plugin;
-        this.configManager = configManager;
-        this.logger = plugin.getLogger();
-
-        // Initialize modern components
-        this.executor = new MLExecutor(plugin);
-        this.cache = new MLCache();
-        this.metrics = new MLMetrics();
-
-        // Initialize legacy components
-        this.mlConfig = new MLConfig(plugin);
-        this.legacyDataCollector = new PlayerDataCollector(this.mlConfig);
-        ReasoningMLModel legacyModel = new ReasoningMLModel(plugin, this.mlConfig);
-
-        // Wrap legacy components with adapters
-        this.model = new ReasoningMLModelAdapter(legacyModel);
-        this.dataCollector = new PlayerDataCollectorAdapter(this.legacyDataCollector);
-        this.analysisManager = new AsyncAnalysisManager(executor, model, dataCollector, cache, metrics);
-
-        // Configure components based on ML config
-        configureComponents(this.mlConfig);
-
-        // Initialize advanced components
-        this.onlineLearningManager = new OnlineLearningManager();
-        this.clusteringEngine = new PlayerClusteringEngine();
-        this.autoTrainer = new AutoTrainer();
-        this.botTrainingManager = new BotTrainingManager();
-        this.ensembleDetector = new EnsembleDetector();
-        this.isolationForest = new IsolationForest(100, 10, 0.6);
-        this.autoencoder = null; // Initialized during training
-        this.featureEngineer = new AdvancedFeatureEngineer();
-
-        // Register events
-        plugin.getServer().getPluginManager().registerEvents(this, plugin);
-
-        // Initialize data management
-        MLDataManager.initialize(plugin);
-
-        // Configure components based on ML config
-        configureComponents(this.mlConfig);
-
-        // Start maintenance tasks
-        startMaintenanceTasks();
-
-        // Initial model training
-        initializeModel();
-
-        logger.info("Modern ML Manager initialized with async processing and caching");
-    }
-
-    /**
-     * Configure ML components based on ML config
-     */
-    private void configureComponents(MLConfig mlConfig) {
-        // Configure cache
-        cache.configureCache(
+   private void configureComponents(MLConfig mlConfig) {
+      this.cache
+         .configureCache(
             mlConfig.getAnalysisCacheMaxSize(),
-            java.time.Duration.ofMinutes(mlConfig.getAnalysisCacheExpiryMinutes()),
+            Duration.ofMinutes(mlConfig.getAnalysisCacheExpiryMinutes()),
             mlConfig.getFeaturesCacheMaxSize(),
-            java.time.Duration.ofMinutes(mlConfig.getFeaturesCacheExpiryMinutes()),
+            Duration.ofMinutes(mlConfig.getFeaturesCacheExpiryMinutes()),
             mlConfig.getPlayerDataCacheMaxSize(),
-            java.time.Duration.ofMinutes(mlConfig.getPlayerDataCacheExpiryMinutes())
-        );
+            Duration.ofMinutes(mlConfig.getPlayerDataCacheExpiryMinutes())
+         );
+      if (mlConfig.getExecutorPoolSize() > 0) {
+         this.logger.info("Custom executor pool size configured: " + mlConfig.getExecutorPoolSize());
+      }
 
-        // Configure executor if custom pool size specified
-        if (mlConfig.getExecutorPoolSize() > 0) {
-            // Note: In a real implementation, you might recreate the executor
-            logger.info("Custom executor pool size configured: " + mlConfig.getExecutorPoolSize());
-        }
+      this.logger
+         .info(
+            "ML Components configured: Cache sizes ["
+               + mlConfig.getAnalysisCacheMaxSize()
+               + ", "
+               + mlConfig.getFeaturesCacheMaxSize()
+               + ", "
+               + mlConfig.getPlayerDataCacheMaxSize()
+               + "]"
+         );
+   }
 
-        logger.info("ML Components configured: Cache sizes [" +
-            mlConfig.getAnalysisCacheMaxSize() + ", " +
-            mlConfig.getFeaturesCacheMaxSize() + ", " +
-            mlConfig.getPlayerDataCacheMaxSize() + "]");
-    }
+   private void initializeModel() {
+      this.executor.<Boolean>submitMLTask(() -> {
+         try {
+            if (!this.model.train(Collections.emptyList())) {
+               this.logger.warning("Failed to train ML model. Use '/owml train' to collect training data.");
+            } else {
+               this.logger.info("ML model trained successfully!");
+            }
 
-    /**
-     * Initialize model with graceful degradation
-     */
-    private void initializeModel() {
-        executor.submitMLTask(() -> {
+            return true;
+         } catch (Exception var2) {
+            this.logger.severe("Error initializing ML model: " + var2.getMessage());
+            return false;
+         }
+      }).thenAccept(success -> {
+         if (success) {
+            this.startAutoAnalysis();
+         }
+      });
+   }
+
+   private void startMaintenanceTasks() {
+      MLConfig mlConfig = new MLConfig(this.plugin);
+      this.cleanupTask = this.executor
+         .scheduleMaintenance(this::performMaintenance, mlConfig.getCleanupIntervalMinutes(), mlConfig.getCleanupIntervalMinutes(), TimeUnit.MINUTES);
+      this.metricsTask = this.executor.scheduleMaintenance(() -> {
+         this.logger.info("ML Metrics: " + this.metrics.getStats());
+         this.logger.info("Cache Stats: " + this.cache.getStats());
+      }, mlConfig.getMetricsReportIntervalMinutes(), mlConfig.getMetricsReportIntervalMinutes(), TimeUnit.MINUTES);
+   }
+
+   private void performMaintenance() {
+      try {
+         this.dataCollector.cleanupOldData();
+         this.cache.clearAll();
+         if (this.analysisManager instanceof AsyncAnalysisManager) {
+            ((AsyncAnalysisManager)this.analysisManager).cleanupCompletedAnalyses();
+         }
+
+         long cutoffTime = System.currentTimeMillis() - TimeUnit.HOURS.toMillis(1L);
+         this.detectionResults.entrySet().removeIf(entry -> false);
+      } catch (Exception var3) {
+         this.logger.warning("Error during maintenance: " + var3.getMessage());
+      }
+   }
+
+   @Override
+   public CompletableFuture<DetectionResult> analyzePlayer(Player player) {
+      return this.analysisManager.analyzeAsync(player.getUniqueId()).thenApply(this::convertToDetectionResult);
+   }
+
+   private DetectionResult convertToDetectionResult(ReasoningMLModel.DetectionResult mlResult) {
+      double prob = mlResult.getProbability();
+      DetectionLevel level;
+      if (prob >= 0.9) {
+         level = DetectionLevel.CRITICAL;
+      } else if (prob >= 0.7) {
+         level = DetectionLevel.HIGH;
+      } else if (prob >= 0.5) {
+         level = DetectionLevel.MEDIUM;
+      } else if (prob >= 0.3) {
+         level = DetectionLevel.LOW;
+      } else {
+         level = DetectionLevel.SAFE;
+      }
+
+      return new DetectionResult(level, prob, mlResult.getReasoningSteps(), DetectionType.PATTERN, Map.of("conclusion", mlResult.getConclusion()));
+   }
+
+   @Override
+   public void stopAnalysis(UUID playerId) {
+      this.analysisManager.stopAnalysis(playerId);
+      this.playersUnderAnalysis.remove(playerId);
+   }
+
+   private void startAutoAnalysis() {
+   }
+
+   public void analyzePlayerAsync(UUID playerId, ModernMLManager.AnalysisCallback callback) {
+      this.analysisManager.analyzeAsync(playerId).thenAccept(result -> this.executor.runOnMainThread(() -> {
+         try {
+            callback.onAnalysisComplete(playerId, result);
+         } catch (Exception var5) {
+            this.logger.warning("Error in analysis callback: " + var5.getMessage());
+         }
+      })).exceptionally(throwable -> {
+         this.logger.warning("Asynchronous analysis failed for " + playerId + ": " + throwable.getMessage());
+         this.executor.runOnMainThread(() -> callback.onAnalysisFailed(playerId, throwable));
+         return null;
+      });
+   }
+
+   public ReasoningMLModel.DetectionResult analyzePlayerSync(UUID playerId) {
+      return this.analysisManager.analyzeSync(playerId);
+   }
+
+   public void startTraining(Player player, boolean isCheater) {
+      if (this.isEnabled()) {
+         UUID playerId = player.getUniqueId();
+         this.stopTraining(playerId);
+         this.dataCollector.startCollecting(player, isCheater);
+         long endTime = System.currentTimeMillis() + this.getTrainingSessionDuration() * 1000L;
+         this.trainingEndTimes.put(playerId, endTime);
+         Schedulers.Task task = Schedulers.globalLater(() -> this.completeTraining(player, isCheater), this.getTrainingSessionDuration() * 20L);
+         this.trainingTasks.put(playerId, task);
+         this.notifyStaff("Started collecting training data for " + player.getName() + " as " + (isCheater ? "cheater" : "normal player"));
+      }
+   }
+
+   private void completeTraining(Player player, boolean isCheater) {
+      PlayerMiningData data = this.dataCollector.stopCollecting(player);
+      this.trainingTasks.remove(player.getUniqueId());
+      this.trainingEndTimes.remove(player.getUniqueId());
+      if (data != null) {
+         this.executor.submitSequentialTask(() -> {
             try {
-                if (!model.train(Collections.emptyList())) {
-                    logger.warning("Failed to train ML model. Use '/owml train' to collect training data.");
-                } else {
-                    logger.info("ML model trained successfully!");
-                }
-                return true;
-            } catch (Exception e) {
-                logger.severe("Error initializing ML model: " + e.getMessage());
-                // Graceful degradation - continue working without model
-                return false;
+               MLDataManager.saveTrainingData(data);
+               boolean retrained = this.model.train(Collections.singleton(data));
+               this.executor.runOnMainThread(() -> {
+                  String status = retrained ? "successfully" : "failed";
+                  this.notifyStaff("Training completed for " + player.getName() + ". Model retrained " + status);
+               });
+            } catch (Exception var4) {
+               this.logger.severe("Error saving training data: " + var4.getMessage());
             }
-        }).thenAccept(success -> {
-            if (success) {
-                startAutoAnalysis();
-            }
-        });
-    }
+         });
+      }
+   }
 
-    /**
-     * Start system maintenance tasks
-     */
-    private void startMaintenanceTasks() {
-        MLConfig mlConfig = new MLConfig(plugin);
+   public void stopTraining(UUID playerId) {
+      Schedulers.Task task = this.trainingTasks.remove(playerId);
+      if (task != null) {
+         task.cancel();
+      }
 
-        // Clean up stale data
-        cleanupTask = executor.scheduleMaintenance(this::performMaintenance,
-            mlConfig.getCleanupIntervalMinutes(), mlConfig.getCleanupIntervalMinutes(), TimeUnit.MINUTES);
+      this.trainingEndTimes.remove(playerId);
+      this.dataCollector.stopCollecting(Bukkit.getPlayer(playerId));
+   }
 
-        // Report metrics
-        metricsTask = executor.scheduleMaintenance(() -> {
-            logger.info("ML Metrics: " + metrics.getStats());
-            logger.info("Cache Stats: " + cache.getStats());
-        }, mlConfig.getMetricsReportIntervalMinutes(), mlConfig.getMetricsReportIntervalMinutes(), TimeUnit.MINUTES);
-    }
+   public String getPerformanceStats() {
+      return "ML Performance:\n" + this.metrics.getStats() + "\n" + this.cache.getStats();
+   }
 
-    /**
-     * Perform system maintenance
-     */
-    private void performMaintenance() {
-        try {
-            // Clean up old data
-            dataCollector.cleanupOldData();
-            cache.clearAll();
+   public void shutdown() {
+      this.logger.info("Shutting down Modern ML Manager...");
+      this.trainingTasks.values().forEach(Schedulers.Task::cancel);
+      this.trainingTasks.clear();
+      if (this.cleanupTask != null) {
+         this.cleanupTask.cancel(true);
+      }
 
-            // Clean up completed analyses
-            if (analysisManager instanceof AsyncAnalysisManager) {
-                ((AsyncAnalysisManager) analysisManager).cleanupCompletedAnalyses();
-            }
+      if (this.metricsTask != null) {
+         this.metricsTask.cancel(true);
+      }
 
-            // Clean up stale results
-            long cutoffTime = System.currentTimeMillis() - TimeUnit.HOURS.toMillis(1);
-            detectionResults.entrySet().removeIf(entry -> {
-                // Can add logic to check last update time
-                return false; // Keep all for now
-            });
+      this.executor.shutdown();
+      this.model.dispose();
+      this.cache.clearAll();
+      this.logger.info("Modern ML Manager shut down");
+   }
 
-        } catch (Exception e) {
-            logger.warning("Error during maintenance: " + e.getMessage());
-        }
-    }
+   public boolean isEnabled() {
+      return this.mlConfig.isEnabled();
+   }
 
-    @Override
-    public CompletableFuture<DetectionResult> analyzePlayer(Player player) {
-        return analysisManager.analyzeAsync(player.getUniqueId())
-            .thenApply(this::convertToDetectionResult);
-    }
+   public boolean isTrained() {
+      return this.model.isTrained();
+   }
 
-    private DetectionResult convertToDetectionResult(ReasoningMLModel.DetectionResult mlResult) {
-        DetectionLevel level;
-        double prob = mlResult.getProbability();
-        
-        if (prob >= 0.9) level = DetectionLevel.CRITICAL;
-        else if (prob >= 0.7) level = DetectionLevel.HIGH;
-        else if (prob >= 0.5) level = DetectionLevel.MEDIUM;
-        else if (prob >= 0.3) level = DetectionLevel.LOW;
-        else level = DetectionLevel.SAFE;
-        
-        return new DetectionResult(
-            level,
-            prob,
-            mlResult.getReasoningSteps(),
-            DetectionType.PATTERN,
-            Map.of("conclusion", mlResult.getConclusion())
-        );
-    }
+   public long getTrainingSessionDuration() {
+      return 60L;
+   }
 
-    @Override
-    public void stopAnalysis(UUID playerId) {
-        analysisManager.stopAnalysis(playerId);
-        playersUnderAnalysis.remove(playerId);
-    }
+   public Set<UUID> getPlayersUnderAnalysis() {
+      return this.playersUnderAnalysis;
+   }
 
-    /**
-     * Start automatic analysis
-     */
-    private void startAutoAnalysis() {
-        // Implement automatic player analysis
-        // Can add logic for periodic analysis of suspicious players
-    }
+   public Map<UUID, ReasoningMLModel.DetectionResult> getDetectionResults() {
+      return this.detectionResults;
+   }
 
-    /**
-     * Asynchronous player analysis
-     */
-    public void analyzePlayerAsync(UUID playerId, AnalysisCallback callback) {
-        analysisManager.analyzeAsync(playerId)
-            .thenAccept(result -> {
-                executor.runOnMainThread(() -> {
-                    try {
-                        callback.onAnalysisComplete(playerId, result);
-                    } catch (Exception e) {
-                        logger.warning("Error in analysis callback: " + e.getMessage());
-                    }
-                });
-            })
-            .exceptionally(throwable -> {
-                logger.warning("Asynchronous analysis failed for " + playerId + ": " + throwable.getMessage());
-                executor.runOnMainThread(() -> {
-                    callback.onAnalysisFailed(playerId, throwable);
-                });
-                return null;
-            });
-    }
+   public Map<UUID, Boolean> getPlayersInTraining() {
+      return new ConcurrentHashMap<>();
+   }
 
-    /**
-     * Synchronous analysis (critical cases only)
-     */
-    public ReasoningMLModel.DetectionResult analyzePlayerSync(UUID playerId) {
-        return analysisManager.analyzeSync(playerId);
-    }
+   public double getDetectionScore(UUID playerId) {
+      return this.analysisManager.getSuspicionScore(playerId);
+   }
 
-    /**
-     * Start collecting training data
-     */
-    public void startTraining(Player player, boolean isCheater) {
-        if (!isEnabled()) {
-            return;
-        }
+   @Override
+   public boolean isUnderAnalysis(UUID playerId) {
+      return this.playersUnderAnalysis.contains(playerId);
+   }
 
-        UUID playerId = player.getUniqueId();
+   public long getRemainingAnalysisTime(UUID playerId) {
+      return this.analysisManager.getRemainingAnalysisTime(playerId);
+   }
 
-        // Stop existing data collection
-        stopTraining(playerId);
+   public long getRemainingTrainingTime(UUID playerId) {
+      Long endTime = this.trainingEndTimes.get(playerId);
+      if (endTime == null) {
+         return -1L;
+      } else {
+         long remaining = endTime - System.currentTimeMillis();
+         return Math.max(0L, remaining / 1000L);
+      }
+   }
 
-        // Start new collection
-        dataCollector.startCollecting(player, isCheater);
+   public void cancelTraining(Player player) {
+      this.stopTraining(player.getUniqueId());
+   }
 
-        long endTime = System.currentTimeMillis() + (getTrainingSessionDuration() * 1000L);
-        trainingEndTimes.put(playerId, endTime);
+   public void setEnabled(boolean enabled) {
+      this.mlConfig.setEnabled(enabled);
+   }
 
-        // Schedule collection completion
-        BukkitTask task = Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            completeTraining(player, isCheater);
-        }, getTrainingSessionDuration() * 20L);
+   public MLConfig getMLConfig() {
+      return this.mlConfig;
+   }
 
-        trainingTasks.put(playerId, task);
+   public PlayerDataCollector getDataCollector() {
+      return this.legacyDataCollector;
+   }
 
-        notifyStaff("Started collecting training data for " + player.getName() +
-                   " as " + (isCheater ? "cheater" : "normal player"));
-    }
+   public PlayerClusteringEngine getClusteringEngine() {
+      return this.clusteringEngine;
+   }
 
-    /**
-     * Complete training data collection
-     */
-    private void completeTraining(Player player, boolean isCheater) {
-        PlayerMiningData data = dataCollector.stopCollecting(player);
-        trainingTasks.remove(player.getUniqueId());
-        trainingEndTimes.remove(player.getUniqueId());
+   public ModernMLManager.MLStats getComprehensiveStats() {
+      return new ModernMLManager.MLStats(
+         this.onlineLearningManager.getStats(),
+         this.clusteringEngine.getStats(),
+         this.isTrained(),
+         this.playersUnderAnalysis.size(),
+         this.autoAnalysisQueue.size(),
+         System.currentTimeMillis()
+      );
+   }
 
-        if (data != null) {
-            // Async saving and retraining
-            executor.submitSequentialTask(() -> {
-                try {
-                    MLDataManager.saveTrainingData(data);
-                    boolean retrained = model.train(Collections.singleton(data));
+   @Override
+   public void startAnalysis(Player player) {
+      this.analysisManager.startAnalysis(player.getUniqueId(), this.getTrainingSessionDuration());
+   }
 
-                    executor.runOnMainThread(() -> {
-                        String status = retrained ? "successfully" : "failed";
-                        notifyStaff("Training completed for " + player.getName() +
-                                   ". Model retrained " + status);
-                    });
-                } catch (Exception e) {
-                    logger.severe("Error saving training data: " + e.getMessage());
-                }
-            });
-        }
-    }
+   public List<String> getSimplifiedReport(UUID playerId) {
+      List<String> report = new ArrayList<>();
+      report.add("=== ML Analysis Report ===");
+      report.add("Player: " + Bukkit.getOfflinePlayer(playerId).getName());
+      report.add("Status: " + (this.isUnderAnalysis(playerId) ? "Under Analysis" : "Not Analyzing"));
+      report.add("Suspicion Score: " + String.format("%.2f", this.getDetectionScore(playerId) * 100.0) + "%");
+      report.add("Remaining Time: " + this.getRemainingAnalysisTime(playerId) + "s");
+      report.add("Cache Hit Rate: " + String.format("%.1f%%", this.cache.getStats().analysisStats.hitRate() * 100.0));
+      report.add("Total Predictions: " + this.metrics.getStats().totalPredictions);
+      return report;
+   }
 
-    /**
-     * Stop collecting data
-     */
-    public void stopTraining(UUID playerId) {
-        BukkitTask task = trainingTasks.remove(playerId);
-        if (task != null) {
-            task.cancel();
-        }
-        trainingEndTimes.remove(playerId);
-        dataCollector.stopCollecting(Bukkit.getPlayer(playerId));
-    }
+   private void notifyStaff(String message) {
+      for (Player player : Bukkit.getOnlinePlayers()) {
+         if (player.hasPermission("owml.staff")) {
+            player.sendMessage("§a[OverWatch-ML] §f" + message);
+         }
+      }
+   }
 
-    /**
-     * Get performance statistics
-     */
-    public String getPerformanceStats() {
-        return "ML Performance:\n" + metrics.getStats() + "\n" + cache.getStats();
-    }
+   @EventHandler
+   public void onBlockBreak(BlockBreakEvent event) {
+      if (this.isEnabled()) {
+         Player player = event.getPlayer();
+         if (this.playersUnderAnalysis.contains(player.getUniqueId())) {
+            this.dataCollector.addBlockBreak(player, event.getBlock().getType().name(), event.getBlock().getLocation().toString());
+         }
+      }
+   }
 
-    /**
-     * Graceful shutdown
-     */
-    public void shutdown() {
-        logger.info("Shutting down Modern ML Manager...");
+   @EventHandler
+   public void onPlayerMove(PlayerMoveEvent event) {
+      if (this.isEnabled()) {
+         Player player = event.getPlayer();
+         if (this.playersUnderAnalysis.contains(player.getUniqueId())) {
+            this.dataCollector
+               .addMovement(
+                  player,
+                  event.getFrom().getX(),
+                  event.getFrom().getY(),
+                  event.getFrom().getZ(),
+                  event.getTo().getX(),
+                  event.getTo().getY(),
+                  event.getTo().getZ()
+               );
+         }
+      }
+   }
 
-        // Cancel all tasks
-        trainingTasks.values().forEach(BukkitTask::cancel);
-        trainingTasks.clear();
+   @EventHandler
+   public void onPlayerQuit(PlayerQuitEvent event) {
+      UUID playerId = event.getPlayer().getUniqueId();
+      this.stopTraining(playerId);
+      this.analysisManager.stopAnalysis(playerId);
+      this.cache.invalidatePlayer(playerId);
+   }
 
-        // Cancel maintenance tasks
-        if (cleanupTask != null) cleanupTask.cancel(true);
-        if (metricsTask != null) metricsTask.cancel(true);
+   public void setAutoAnalysisEnabled(boolean enabled) {
+      this.mlConfig.setAutoAnalysisEnabled(enabled);
+   }
 
-        // Shutdown executor
-        executor.shutdown();
+   public int getAutoAnalysisQueueSize() {
+      return this.autoAnalysisQueue.size();
+   }
 
-        // Clean up resources
-        model.dispose();
-        cache.clearAll();
+   public boolean hasExistingReport(UUID playerId, String playerName) {
+      List<String> playerReports = MLDataManager.getPlayerReports(playerName);
+      return !playerReports.isEmpty();
+   }
 
-        logger.info("Modern ML Manager shut down");
-    }
+   public boolean isPlayerInAnalysisQueue(UUID playerId) {
+      return this.autoAnalysisQueue.contains(playerId);
+   }
 
-    // Legacy compatibility methods
-    public boolean isEnabled() { return mlConfig.isEnabled(); }
-    public boolean isTrained() { return model.isTrained(); }
-    public long getTrainingSessionDuration() { return 60; } // 60 seconds default
-    public Set<UUID> getPlayersUnderAnalysis() { return playersUnderAnalysis; }
-    public Map<UUID, ReasoningMLModel.DetectionResult> getDetectionResults() { return detectionResults; }
-    public Map<UUID, Boolean> getPlayersInTraining() {
-        // Return empty map for compatibility - can be extended later
-        return new ConcurrentHashMap<>();
-    }
-    public double getDetectionScore(UUID playerId) {
-        return analysisManager.getSuspicionScore(playerId);
-    }
-    public boolean isUnderAnalysis(UUID playerId) {
-        return playersUnderAnalysis.contains(playerId);
-    }
-    public long getRemainingAnalysisTime(UUID playerId) {
-        return analysisManager.getRemainingAnalysisTime(playerId);
-    }
-    public long getRemainingTrainingTime(UUID playerId) {
-        Long endTime = trainingEndTimes.get(playerId);
-        if (endTime == null) return -1;
-        long remaining = endTime - System.currentTimeMillis();
-        return Math.max(0, remaining / 1000);
-    }
-    public void cancelTraining(Player player) {
-        stopTraining(player.getUniqueId());
-    }
-    public void setEnabled(boolean enabled) {
-        mlConfig.setEnabled(enabled);
-    }
-    public MLConfig getMLConfig() {
-        return mlConfig;
-    }
-    public PlayerDataCollector getDataCollector() {
-        return legacyDataCollector;
-    }
+   public void queuePlayerForAnalysis(UUID playerId) {
+      if (!this.autoAnalysisQueue.contains(playerId) && !this.playersUnderAnalysis.contains(playerId)) {
+         Player player = Bukkit.getPlayer(playerId);
+         if (player != null && player.isOnline()) {
+            this.autoAnalysisQueue.add(playerId);
+            int suspiciousCount = SuspiciousManager.getSuspiciousCounts().getOrDefault(playerId, 0);
+            this.plugin.getLogger().info("Added " + player.getName() + " to analysis queue with suspicious count: " + suspiciousCount);
+            this.processAutoAnalysisQueue();
+         }
+      }
+   }
 
-    public PlayerClusteringEngine getClusteringEngine() {
-        return clusteringEngine;
-    }
+   private void processAutoAnalysisQueue() {
+      if (!this.autoAnalysisQueue.isEmpty()) {
+         UUID playerId = this.autoAnalysisQueue.poll();
+         Player player = Bukkit.getPlayer(playerId);
+         if (player != null && player.isOnline()) {
+            this.startAnalysis(player);
+         }
+      }
+   }
 
-    public MLStats getComprehensiveStats() {
-        return new MLStats(
-            onlineLearningManager.getStats(),
-            clusteringEngine.getStats(),
-            isTrained(),
-            playersUnderAnalysis.size(),
-            autoAnalysisQueue.size(),
-            System.currentTimeMillis()
-        );
-    }
+   public BotTrainingManager getBotTrainingManager() {
+      return this.botTrainingManager;
+   }
 
-    // Additional methods for command compatibility
-    public void startAnalysis(Player player) {
-        analysisManager.startAnalysis(player.getUniqueId(), getTrainingSessionDuration());
-    }
-
-    public List<String> getSimplifiedReport(UUID playerId) {
-        List<String> report = new ArrayList<>();
-        report.add("=== ML Analysis Report ===");
-        report.add("Player: " + Bukkit.getOfflinePlayer(playerId).getName());
-        report.add("Status: " + (isUnderAnalysis(playerId) ? "Under Analysis" : "Not Analyzing"));
-        report.add("Suspicion Score: " + String.format("%.2f", getDetectionScore(playerId) * 100) + "%");
-        report.add("Remaining Time: " + getRemainingAnalysisTime(playerId) + "s");
-        report.add("Cache Hit Rate: " + String.format("%.1f%%", cache.getStats().analysisStats.hitRate() * 100));
-        report.add("Total Predictions: " + metrics.getStats().totalPredictions);
-        return report;
-    }
-
-    /**
-     * Notify staff
-     */
-    private void notifyStaff(String message) {
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            if (player.hasPermission("owml.staff")) {
-                player.sendMessage("§a[OverWatch-ML] §f" + message);
-            }
-        }
-    }
-
-    // Event handlers
-    @EventHandler
-    public void onBlockBreak(BlockBreakEvent event) {
-        if (!isEnabled()) return;
-
-        Player player = event.getPlayer();
-        if (playersUnderAnalysis.contains(player.getUniqueId())) {
-            // Add mining data
-            dataCollector.addBlockBreak(player,
-                event.getBlock().getType().name(),
-                event.getBlock().getLocation().toString());
-        }
-    }
-
-    @EventHandler
-    public void onPlayerMove(PlayerMoveEvent event) {
-        if (!isEnabled()) return;
-
-        Player player = event.getPlayer();
-        if (playersUnderAnalysis.contains(player.getUniqueId())) {
-            // Add movement data
-            dataCollector.addMovement(player,
-                event.getFrom().getX(), event.getFrom().getY(), event.getFrom().getZ(),
-                event.getTo().getX(), event.getTo().getY(), event.getTo().getZ());
-        }
-    }
-
-    @EventHandler
-    public void onPlayerQuit(PlayerQuitEvent event) {
-        UUID playerId = event.getPlayer().getUniqueId();
-
-        // Stop all active processes for player
-        stopTraining(playerId);
-        analysisManager.stopAnalysis(playerId);
-
-        // Clear cache
-        cache.invalidatePlayer(playerId);
-    }
-
-    /**
-     * Enable or disable auto-analysis
-     */
-    public void setAutoAnalysisEnabled(boolean enabled) {
-        mlConfig.setAutoAnalysisEnabled(enabled);
-    }
-
-    /**
-     * Get the number of players in the auto-analysis queue
-     */
-    public int getAutoAnalysisQueueSize() {
-        return autoAnalysisQueue.size();
-    }
-
-    public boolean hasExistingReport(UUID playerId, String playerName) {
-        List<String> playerReports = MLDataManager.getPlayerReports(playerName);
-        return !playerReports.isEmpty();
-    }
-
-    public boolean isPlayerInAnalysisQueue(UUID playerId) {
-        return autoAnalysisQueue.contains(playerId);
-    }
-
-    public void queuePlayerForAnalysis(UUID playerId) {
-        if (!autoAnalysisQueue.contains(playerId) && !playersUnderAnalysis.contains(playerId)) {
-            Player player = Bukkit.getPlayer(playerId);
-            if (player != null && player.isOnline()) {
-                autoAnalysisQueue.add(playerId);
-
-                int suspiciousCount = net.denfry.owml.managers.SuspiciousManager.getSuspiciousCounts().getOrDefault(playerId, 0);
-                plugin.getLogger().info("Added " + player.getName() + " to analysis queue with suspicious count: " + suspiciousCount);
-
-                // Basic queue processing - could be enhanced with sorting and limits
-                processAutoAnalysisQueue();
-            }
-        }
-    }
-
-    private void processAutoAnalysisQueue() {
-        // Simplified version - just start analysis for the next player in queue
-        if (!autoAnalysisQueue.isEmpty()) {
-            UUID playerId = autoAnalysisQueue.poll();
-            Player player = Bukkit.getPlayer(playerId);
-            if (player != null && player.isOnline()) {
-                startAnalysis(player);
-            }
-        }
-    }
-
-    /**
-     * Get bot training manager
-     */
-    public BotTrainingManager getBotTrainingManager() {
-        return botTrainingManager;
-    }
-
-    /**
-     * Manually retrain the ML model with available training data
-     */
-    public void retrainModel() {
-        if (!isEnabled()) {
-            return;
-        }
-
-        executor.submitSequentialTask(() -> {
+   public void retrainModel() {
+      if (this.isEnabled()) {
+         this.executor.submitSequentialTask(() -> {
             try {
-                // Load all available training data
-                MLDataManager.MLTrainingData trainingData = MLDataManager.loadTrainingData();
-                
-                // Convert feature maps to training samples for the model
-                List<PlayerMiningData> allData = new ArrayList<>();
-                
-                // Note: We need a way to convert MLTrainingData back to PlayerMiningData or 
-                // modify model.train to accept the training data directly.
-                // For now, let's just trigger the training with an empty list which 
-                // in some implementations triggers a reload from disk.
-                
-                boolean retrained = model.train(Collections.emptyList());
-                int totalSamples = trainingData.getNormalFeatures().size() + trainingData.getCheaterFeatures().size();
-
-                executor.runOnMainThread(() -> {
-                    if (retrained) {
-                        notifyStaff("ML model retrained successfully with " + totalSamples + " samples!");
-                    } else {
-                        notifyStaff("ML model retraining failed or insufficient data (" + totalSamples + " samples)");
-                    }
-                });
-            } catch (Exception e) {
-                logger.severe("Error during model retraining: " + e.getMessage());
-                executor.runOnMainThread(() -> {
-                    notifyStaff("§cError retraining ML model: " + e.getMessage());
-                });
+               MLDataManager.MLTrainingData trainingData = MLDataManager.loadTrainingData();
+               new ArrayList();
+               boolean retrained = this.model.train(Collections.emptyList());
+               int totalSamples = trainingData.getNormalFeatures().size() + trainingData.getCheaterFeatures().size();
+               this.executor.runOnMainThread(() -> {
+                  if (retrained) {
+                     this.notifyStaff("ML model retrained successfully with " + totalSamples + " samples!");
+                  } else {
+                     this.notifyStaff("ML model retraining failed or insufficient data (" + totalSamples + " samples)");
+                  }
+               });
+            } catch (Exception var5) {
+               this.logger.severe("Error during model retraining: " + var5.getMessage());
+               this.executor.runOnMainThread(() -> this.notifyStaff("§cError retraining ML model: " + var5.getMessage()));
             }
-        });
-    }
+         });
+      }
+   }
 
-    /**
-     * Comprehensive ML statistics
-     */
-    public static class MLStats {
-        public final OnlineLearningManager.LearningStats learningStats;
-        public final PlayerClusteringEngine.ClusteringStats clusteringStats;
-        public final boolean modelTrained;
-        public final int activeAnalysis;
-        public final int queuedAnalysis;
-        public final long generatedAt;
+   public interface AnalysisCallback {
+      void onAnalysisComplete(UUID var1, ReasoningMLModel.DetectionResult var2);
 
-        public MLStats(OnlineLearningManager.LearningStats learningStats,
-                      PlayerClusteringEngine.ClusteringStats clusteringStats,
-                      boolean modelTrained, int activeAnalysis, int queuedAnalysis, long generatedAt) {
-            this.learningStats = learningStats;
-            this.clusteringStats = clusteringStats;
-            this.modelTrained = modelTrained;
-            this.activeAnalysis = activeAnalysis;
-            this.queuedAnalysis = queuedAnalysis;
-            this.generatedAt = generatedAt;
-        }
-    }
+      void onAnalysisFailed(UUID var1, Throwable var2);
+   }
 
-    /**
-     * Analysis callback interface
-     */
-    public interface AnalysisCallback {
-        void onAnalysisComplete(UUID playerId, ReasoningMLModel.DetectionResult result);
-        void onAnalysisFailed(UUID playerId, Throwable error);
-    }
+   public static class MLStats {
+      public final OnlineLearningManager.LearningStats learningStats;
+      public final PlayerClusteringEngine.ClusteringStats clusteringStats;
+      public final boolean modelTrained;
+      public final int activeAnalysis;
+      public final int queuedAnalysis;
+      public final long generatedAt;
+
+      public MLStats(
+         OnlineLearningManager.LearningStats learningStats,
+         PlayerClusteringEngine.ClusteringStats clusteringStats,
+         boolean modelTrained,
+         int activeAnalysis,
+         int queuedAnalysis,
+         long generatedAt
+      ) {
+         this.learningStats = learningStats;
+         this.clusteringStats = clusteringStats;
+         this.modelTrained = modelTrained;
+         this.activeAnalysis = activeAnalysis;
+         this.queuedAnalysis = queuedAnalysis;
+         this.generatedAt = generatedAt;
+      }
+   }
 }

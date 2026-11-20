@@ -1,147 +1,102 @@
 package net.denfry.owml.punishments.handlers.Paranoia.effects;
 
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
+import net.denfry.owml.OverWatchML;
+import net.denfry.owml.config.ConfigManager;
+import net.denfry.owml.utils.Schedulers;
 import org.bukkit.Location;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
-import net.denfry.owml.OverWatchML;
-import net.denfry.owml.config.ConfigManager;
 
-/**
- * Handles all sound-related paranoia effects
- */
 public class SoundEffect {
+   private final OverWatchML plugin;
+   private final ConfigManager configManager;
+   private final Sound[] scarySounds;
 
-    private final OverWatchML plugin;
-    private final ConfigManager configManager;
+   public SoundEffect(OverWatchML plugin, ConfigManager configManager) {
+      this.plugin = plugin;
+      this.configManager = configManager;
+      this.scarySounds = this.initializeScarySounds();
+   }
 
-    private final Sound[] scarySounds;
+   private Sound[] initializeScarySounds() {
+      List<Sound> sounds = new ArrayList<>();
+      this.addSoundIfExists(sounds, "ENTITY_CREEPER_PRIMED");
+      this.addSoundIfExists(sounds, "ENTITY_ENDERMAN_SCREAM");
+      this.addSoundIfExists(sounds, "ENTITY_GHAST_WARN");
+      this.addSoundIfExists(sounds, "ENTITY_WITHER_AMBIENT");
+      this.addSoundIfExists(sounds, "ENTITY_ZOMBIE_AMBIENT");
+      this.addSoundIfExists(sounds, "ENTITY_SKELETON_AMBIENT");
+      this.addSoundIfExists(sounds, "ENTITY_SPIDER_AMBIENT");
+      this.addSoundIfExists(sounds, "AMBIENT_CAVE");
+      this.addSoundIfExists(sounds, "BLOCK_STONE_BREAK");
+      this.addSoundIfExists(sounds, "ENTITY_TNT_PRIMED");
+      this.addSoundIfExists(sounds, "BLOCK_CHORUS_FLOWER_DEATH");
+      this.addSoundIfExists(sounds, "ENTITY_WARDEN_NEARBY_CLOSER");
+      this.addSoundIfExists(sounds, "ENTITY_WARDEN_HEARTBEAT");
+      return sounds.toArray(new Sound[0]);
+   }
 
-    public SoundEffect(OverWatchML plugin, ConfigManager configManager) {
-        this.plugin = plugin;
-        this.configManager = configManager;
-        this.scarySounds = initializeScarySounds();
-    }
+   private void addSoundIfExists(List<Sound> soundList, String soundName) {
+      try {
+         Field field = Sound.class.getDeclaredField(soundName);
+         if (field != null && field.getType() == Sound.class) {
+            Sound sound = (Sound)field.get(null);
+            soundList.add(sound);
+         }
+      } catch (IllegalAccessException | ClassCastException | NoSuchFieldException var5) {
+      }
+   }
 
-    /**
-     * Initialize the array of scary sounds based on sounds that exist in the current version
-     */
-    private Sound[] initializeScarySounds() {
-        java.util.List<Sound> sounds = new java.util.ArrayList<>();
+   public void playParanoiaSound(Player player) {
+      Sound sound = this.scarySounds[ThreadLocalRandom.current().nextInt(this.scarySounds.length)];
+      Location playerLoc = player.getLocation();
+      Location soundLoc;
+      if (ThreadLocalRandom.current().nextBoolean()) {
+         double distance = 3.0 + ThreadLocalRandom.current().nextDouble() * 7.0;
+         double angle = ThreadLocalRandom.current().nextDouble() * 2.0 * Math.PI;
+         double x = playerLoc.getX() + Math.cos(angle) * distance;
+         double z = playerLoc.getZ() + Math.sin(angle) * distance;
+         soundLoc = new Location(playerLoc.getWorld(), x, playerLoc.getY(), z);
+      } else {
+         soundLoc = playerLoc;
+      }
 
-        // Base sounds that exist in most versions (1.16.5+)
-        addSoundIfExists(sounds, "ENTITY_CREEPER_PRIMED");
-        addSoundIfExists(sounds, "ENTITY_ENDERMAN_SCREAM");
-        addSoundIfExists(sounds, "ENTITY_GHAST_WARN");
-        addSoundIfExists(sounds, "ENTITY_WITHER_AMBIENT");
-        addSoundIfExists(sounds, "ENTITY_ZOMBIE_AMBIENT");
-        addSoundIfExists(sounds, "ENTITY_SKELETON_AMBIENT");
-        addSoundIfExists(sounds, "ENTITY_SPIDER_AMBIENT");
-        addSoundIfExists(sounds, "AMBIENT_CAVE");
-        addSoundIfExists(sounds, "BLOCK_STONE_BREAK");
-        addSoundIfExists(sounds, "ENTITY_TNT_PRIMED");
-        addSoundIfExists(sounds, "BLOCK_CHORUS_FLOWER_DEATH");
+      float volume = 0.3F + ThreadLocalRandom.current().nextFloat() * 0.7F;
+      float pitch = 0.7F + ThreadLocalRandom.current().nextFloat() * 0.6F;
+      player.playSound(soundLoc, sound, volume, pitch);
+      if (this.configManager.isDebugEnabled()) {
+         this.plugin.getLogger().info("Playing paranoia sound " + sound + " to " + player.getName());
+      }
+   }
 
-        // Version-specific sounds (1.19+, might not exist in older versions)
-        addSoundIfExists(sounds, "ENTITY_WARDEN_NEARBY_CLOSER");
-        addSoundIfExists(sounds, "ENTITY_WARDEN_HEARTBEAT");
+   public void playDistantMiningSound(final Player player) {
+      Location playerLoc = player.getLocation();
+      double distance = 15.0 + ThreadLocalRandom.current().nextDouble() * 10.0;
+      double angle = ThreadLocalRandom.current().nextDouble() * 2.0 * Math.PI;
+      double x = playerLoc.getX() + Math.cos(angle) * distance;
+      double z = playerLoc.getZ() + Math.sin(angle) * distance;
+      final Location soundLoc = new Location(playerLoc.getWorld(), x, playerLoc.getY(), z);
+      if (this.configManager.isDebugEnabled()) {
+         this.plugin.getLogger().info("Playing distant mining sounds for " + player.getName() + " at " + Math.round(distance) + " blocks away");
+      }
 
-        return sounds.toArray(new Sound[0]);
-    }
+      Sound[] miningSounds = new Sound[]{Sound.BLOCK_STONE_BREAK, Sound.BLOCK_STONE_HIT};
+      int soundCount = 2 + ThreadLocalRandom.current().nextInt(3);
 
-    /**
-     * Safely add a sound to the list if it exists in the current version
-     */
-    private void addSoundIfExists(java.util.List<Sound> soundList, String soundName) {
-        try {
-            // Use reflection to get the enum field without calling enum methods
-            java.lang.reflect.Field field = Sound.class.getDeclaredField(soundName);
-            if (field != null && field.getType() == Sound.class) {
-                Sound sound = (Sound) field.get(null);
-                soundList.add(sound);
+      for (int i = 0; i < soundCount; i++) {
+         final Sound sound = miningSounds[ThreadLocalRandom.current().nextInt(miningSounds.length)];
+         (new Schedulers.Repeating() {
+            @Override
+            public void run() {
+               if (player.isOnline()) {
+                  player.playSound(soundLoc, sound, 0.4F, 0.8F + ThreadLocalRandom.current().nextFloat() * 0.4F);
+               }
             }
-        } catch (NoSuchFieldException | IllegalAccessException | ClassCastException e) {
-            // Sound doesn't exist in this version, skip it silently
-        }
-    }
-
-    /**
-     * Plays one of the defined scary sounds with randomized pitch and volume
-     */
-    public void playParanoiaSound(Player player) {
-
-        Sound sound = scarySounds[ThreadLocalRandom.current().nextInt(scarySounds.length)];
-
-
-        Location playerLoc = player.getLocation();
-        Location soundLoc;
-
-
-        if (ThreadLocalRandom.current().nextBoolean()) {
-
-            double distance = 3 + ThreadLocalRandom.current().nextDouble() * 7;
-            double angle = ThreadLocalRandom.current().nextDouble() * 2 * Math.PI;
-
-            double x = playerLoc.getX() + Math.cos(angle) * distance;
-            double z = playerLoc.getZ() + Math.sin(angle) * distance;
-
-            soundLoc = new Location(playerLoc.getWorld(), x, playerLoc.getY(), z);
-        } else {
-            soundLoc = playerLoc;
-        }
-
-
-        float volume = 0.3f + ThreadLocalRandom.current().nextFloat() * 0.7f;
-        float pitch = 0.7f + ThreadLocalRandom.current().nextFloat() * 0.6f;
-
-
-        player.playSound(soundLoc, sound, volume, pitch);
-
-        if (configManager.isDebugEnabled()) {
-            plugin.getLogger().info("Playing paranoia sound " + sound + " to " + player.getName());
-        }
-    }
-
-    /**
-     * Plays distant mining sounds to create paranoia
-     */
-    public void playDistantMiningSound(Player player) {
-
-        Location playerLoc = player.getLocation();
-        double distance = 15 + ThreadLocalRandom.current().nextDouble() * 10;
-        double angle = ThreadLocalRandom.current().nextDouble() * 2 * Math.PI;
-
-        double x = playerLoc.getX() + Math.cos(angle) * distance;
-        double z = playerLoc.getZ() + Math.sin(angle) * distance;
-
-        Location soundLoc = new Location(playerLoc.getWorld(), x, playerLoc.getY(), z);
-
-        if (configManager.isDebugEnabled()) {
-            plugin.getLogger().info("Playing distant mining sounds for " + player.getName() + " at " +
-                    Math.round(distance) + " blocks away");
-        }
-
-
-        Sound[] miningSounds = {
-                Sound.BLOCK_STONE_BREAK,
-                Sound.BLOCK_STONE_HIT
-        };
-
-
-        int soundCount = 2 + ThreadLocalRandom.current().nextInt(3);
-
-        for (int i = 0; i < soundCount; i++) {
-            Sound sound = miningSounds[ThreadLocalRandom.current().nextInt(miningSounds.length)];
-
-            new BukkitRunnable() {
-                @Override
-                public void run() {
-                    if (player.isOnline()) {
-                        player.playSound(soundLoc, sound, 0.4f, 0.8f + ThreadLocalRandom.current().nextFloat() * 0.4f);
-                    }
-                }
-            }.runTaskLater(plugin, i * 10L);
-        }
-    }
+         }).entityLater(player, i * 10L);
+      }
+   }
 }

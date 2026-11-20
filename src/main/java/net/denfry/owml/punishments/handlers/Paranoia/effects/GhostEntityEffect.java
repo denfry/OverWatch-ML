@@ -1,491 +1,415 @@
 package net.denfry.owml.punishments.handlers.Paranoia.effects;
 
-import org.bukkit.*;
-import org.bukkit.entity.*;
-import org.bukkit.metadata.FixedMetadataValue;
-import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.util.Vector;
-import net.denfry.owml.config.ConfigManager;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.Map.Entry;
+import java.util.concurrent.ThreadLocalRandom;
 import net.denfry.owml.OverWatchML;
+import net.denfry.owml.config.ConfigManager;
 import net.denfry.owml.punishments.handlers.Paranoia.util.LocationUtils;
 import net.denfry.owml.punishments.handlers.Paranoia.util.ParanoiaDataHolder;
+import net.denfry.owml.utils.SchedulerUtils;
+import net.denfry.owml.utils.Schedulers;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.Particle;
+import org.bukkit.Sound;
+import org.bukkit.World;
+import org.bukkit.entity.ArmorStand;
+import org.bukkit.entity.Creeper;
+import org.bukkit.entity.Enderman;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Monster;
+import org.bukkit.entity.Player;
+import org.bukkit.entity.Zombie;
+import org.bukkit.metadata.FixedMetadataValue;
+import org.bukkit.util.Vector;
 
-import java.util.*;
-import java.util.concurrent.ThreadLocalRandom;
-
-/**
- * Handles all effects related to ghost entities (mobs, fake players, etc.)
- */
 public class GhostEntityEffect {
+   private final OverWatchML plugin;
+   private final ConfigManager configManager;
+   private final ParanoiaDataHolder dataHolder;
 
-    private final OverWatchML plugin;
-    private final ConfigManager configManager;
-    private final ParanoiaDataHolder dataHolder;
+   public GhostEntityEffect(OverWatchML plugin, ConfigManager configManager, ParanoiaDataHolder dataHolder) {
+      this.plugin = plugin;
+      this.configManager = configManager;
+      this.dataHolder = dataHolder;
+   }
 
-    public GhostEntityEffect(OverWatchML plugin, ConfigManager configManager, ParanoiaDataHolder dataHolder) {
-        this.plugin = plugin;
-        this.configManager = configManager;
-        this.dataHolder = dataHolder;
-    }
-
-    /**
-     * Spawns an illusion of a hostile mob that disappears after a few seconds
-     */
-    public void spawnGhostMob(Player player, Location location) {
-        UUID playerId = player.getUniqueId();
-
-
-        EntityType[] hostileMobs = {EntityType.CREEPER, EntityType.ZOMBIE, EntityType.SKELETON, EntityType.SPIDER, EntityType.ENDERMAN, EntityType.WITCH, EntityType.WARDEN};
-
-        EntityType mobType = hostileMobs[ThreadLocalRandom.current().nextInt(hostileMobs.length)];
-
-
-        Location spawnLoc = LocationUtils.findSafeLocationNearby(location);
-        if (spawnLoc == null) return;
-
-
-        Entity ghostMob = spawnLoc.getWorld().spawnEntity(spawnLoc, mobType);
-
-
-        ghostMob.setMetadata("ghost_mob", new FixedMetadataValue(plugin, true));
-
-
-        if (ghostMob instanceof LivingEntity livingMob) {
-
-
+   public void spawnGhostMob(final Player player, Location location) {
+      final UUID playerId = player.getUniqueId();
+      EntityType[] hostileMobs = new EntityType[]{
+         EntityType.CREEPER, EntityType.ZOMBIE, EntityType.SKELETON, EntityType.SPIDER, EntityType.ENDERMAN, EntityType.WITCH, EntityType.WARDEN
+      };
+      EntityType mobType = hostileMobs[ThreadLocalRandom.current().nextInt(hostileMobs.length)];
+      Location spawnLoc = LocationUtils.findSafeLocationNearby(location);
+      if (spawnLoc != null) {
+         final Entity ghostMob = spawnLoc.getWorld().spawnEntity(spawnLoc, mobType);
+         ghostMob.setPersistent(false);
+         ghostMob.setMetadata("ghost_mob", new FixedMetadataValue(this.plugin, true));
+         if (ghostMob instanceof LivingEntity livingMob) {
             boolean willCharge = ThreadLocalRandom.current().nextInt(100) < 40;
-
             if (willCharge) {
+               livingMob.setAI(true);
+               if (livingMob instanceof Monster) {
+                  ((Monster)livingMob).setTarget(player);
+               }
 
-                livingMob.setAI(true);
-
-
-                if (livingMob instanceof Monster) {
-                    ((Monster) livingMob).setTarget(player);
-                }
-
-
-                if (mobType == EntityType.CREEPER) {
-                    Creeper creeper = (Creeper) livingMob;
-                    creeper.setPowered(ThreadLocalRandom.current().nextBoolean());
-
-                    if (ThreadLocalRandom.current().nextInt(100) < 30) {
-
-                        player.playSound(creeper.getLocation(), Sound.ENTITY_CREEPER_PRIMED, 1.0f, 1.0f);
-                    }
-                } else if (mobType == EntityType.ENDERMAN) {
-                    Enderman enderman = (Enderman) livingMob;
-                    enderman.setTarget(player);
-                } else if (mobType == EntityType.SKELETON) {
-
-                    player.playSound(livingMob.getLocation(), Sound.ENTITY_SKELETON_SHOOT, 0.5f, 0.8f);
-                }
+               if (mobType == EntityType.CREEPER) {
+                  Creeper creeper = (Creeper)livingMob;
+                  creeper.setPowered(ThreadLocalRandom.current().nextBoolean());
+                  if (ThreadLocalRandom.current().nextInt(100) < 30) {
+                     player.playSound(creeper.getLocation(), Sound.ENTITY_CREEPER_PRIMED, 1.0F, 1.0F);
+                  }
+               } else if (mobType == EntityType.ENDERMAN) {
+                  Enderman enderman = (Enderman)livingMob;
+                  enderman.setTarget(player);
+               } else if (mobType == EntityType.SKELETON) {
+                  player.playSound(livingMob.getLocation(), Sound.ENTITY_SKELETON_SHOOT, 0.5F, 0.8F);
+               }
             } else {
-
-                livingMob.setAI(false);
-
-
-                Vector direction = player.getLocation().toVector().subtract(livingMob.getLocation().toVector()).normalize();
-                Location lookLocation = livingMob.getLocation().setDirection(direction);
-                livingMob.teleport(lookLocation);
+               livingMob.setAI(false);
+               Vector direction = player.getLocation().toVector().subtract(livingMob.getLocation().toVector()).normalize();
+               Location lookLocation = livingMob.getLocation().setDirection(direction);
+               livingMob.teleportAsync(lookLocation);
             }
-
 
             if (mobType == EntityType.ENDERMAN) {
-                Enderman enderman = (Enderman) livingMob;
-
-                enderman.setTarget(player);
+               Enderman enderman = (Enderman)livingMob;
+               enderman.setTarget(player);
             }
-        }
+         }
 
+         this.dataHolder.addGhostEntity(playerId, ghostMob);
+         String var13 = mobType.name();
 
-        dataHolder.addGhostEntity(playerId, ghostMob);
-
-
-        Sound mobSound;
-        switch (mobType.name()) {
-            case "CREEPER":
-                mobSound = Sound.ENTITY_CREEPER_PRIMED;
-                break;
-            case "ZOMBIE":
-                mobSound = Sound.ENTITY_ZOMBIE_AMBIENT;
-                break;
-            case "SKELETON":
-                mobSound = Sound.ENTITY_SKELETON_AMBIENT;
-                break;
-            case "SPIDER":
-                mobSound = Sound.ENTITY_SPIDER_AMBIENT;
-                break;
-            case "ENDERMAN":
-                mobSound = Sound.ENTITY_ENDERMAN_STARE;
-                break;
-            case "WITCH":
-                mobSound = Sound.ENTITY_WITCH_AMBIENT;
-                break;
-            case "WARDEN":
-                mobSound = Sound.ENTITY_WARDEN_ANGRY;
-                break;
-            default:
-                mobSound = Sound.ENTITY_GENERIC_EXPLODE;
-        }
-        player.playSound(ghostMob.getLocation(), mobSound, 0.8f, 0.7f);
-
-
-        int disappearTime = 80 + ThreadLocalRandom.current().nextInt(60);
-
-        new BukkitRunnable() {
+         player.playSound(ghostMob.getLocation(), switch (var13) {
+            case "CREEPER" -> Sound.ENTITY_CREEPER_PRIMED;
+            case "ZOMBIE" -> Sound.ENTITY_ZOMBIE_AMBIENT;
+            case "SKELETON" -> Sound.ENTITY_SKELETON_AMBIENT;
+            case "SPIDER" -> Sound.ENTITY_SPIDER_AMBIENT;
+            case "ENDERMAN" -> Sound.ENTITY_ENDERMAN_STARE;
+            case "WITCH" -> Sound.ENTITY_WITCH_AMBIENT;
+            case "WARDEN" -> Sound.ENTITY_WARDEN_ANGRY;
+            default -> Sound.ENTITY_GENERIC_EXPLODE;
+         }, 0.8F, 0.7F);
+         int disappearTime = 80 + ThreadLocalRandom.current().nextInt(60);
+         (new Schedulers.Repeating() {
             @Override
             public void run() {
+               if (!ghostMob.isDead()) {
+                  ghostMob.getWorld().spawnParticle(Particle.SMOKE, ghostMob.getLocation().add(0.0, 1.0, 0.0), 30, 0.3, 0.5, 0.3, 0.05);
+                  ghostMob.getWorld().spawnParticle(Particle.PORTAL, ghostMob.getLocation().add(0.0, 1.0, 0.0), 20, 0.3, 0.5, 0.3, 0.05);
+                  player.playSound(ghostMob.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.7F, 0.5F);
+                  ghostMob.remove();
+               }
 
-                if (!ghostMob.isDead()) {
-                    ghostMob.getWorld().spawnParticle(Particle.SMOKE, ghostMob.getLocation().add(0, 1, 0), 30, 0.3, 0.5, 0.3, 0.05);
-
-
-                    ghostMob.getWorld().spawnParticle(Particle.PORTAL, ghostMob.getLocation().add(0, 1, 0), 20, 0.3, 0.5, 0.3, 0.05);
-
-
-                    player.playSound(ghostMob.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.7f, 0.5f);
-
-
-                    ghostMob.remove();
-                }
-
-
-                dataHolder.removeGhostEntity(playerId, ghostMob);
+               GhostEntityEffect.this.dataHolder.removeGhostEntity(playerId, ghostMob);
             }
-        }.runTaskLater(plugin, disappearTime);
+         }).entityLater(player, disappearTime);
+         if (this.configManager.isDebugEnabled()) {
+            this.plugin.getLogger().info("Spawned ghost " + mobType.name() + " for " + player.getName());
+         }
+      }
+   }
 
-        if (configManager.isDebugEnabled()) {
-            plugin.getLogger().info("Spawned ghost " + mobType.name() + " for " + player.getName());
-        }
-    }
+   public void spawnPeripheralGhostMob(Player player) {
+      Location playerLoc = player.getLocation();
+      Vector playerDir = playerLoc.getDirection();
+      boolean leftSide = ThreadLocalRandom.current().nextBoolean();
+      double angle = Math.toRadians(90 + ThreadLocalRandom.current().nextInt(30));
+      if (leftSide) {
+         angle = -angle;
+      }
 
-    /**
-     * Spawns a ghost mob in the player's peripheral vision
-     */
-    public void spawnPeripheralGhostMob(Player player) {
+      double x = playerDir.getX();
+      double z = playerDir.getZ();
+      double newX = x * Math.cos(angle) - z * Math.sin(angle);
+      double newZ = x * Math.sin(angle) + z * Math.cos(angle);
+      Vector direction = new Vector(newX, 0.0, newZ).normalize();
+      double distance = 8.0 + ThreadLocalRandom.current().nextDouble() * 4.0;
+      Location spawnLoc = playerLoc.clone().add(direction.multiply(distance));
+      spawnLoc.setY(playerLoc.getY());
+      spawnLoc = LocationUtils.findSafeLocationNearby(spawnLoc);
+      if (spawnLoc == null) {
+         if (this.configManager.isDebugEnabled()) {
+            this.plugin.getLogger().info("Peripheral ghost mob cancelled for " + player.getName() + " - no valid location found");
+         }
+      } else {
+         EntityType[] hostileMobs = new EntityType[]{EntityType.CREEPER, EntityType.ZOMBIE, EntityType.SKELETON, EntityType.SPIDER, EntityType.ENDERMAN};
+         EntityType mobType = hostileMobs[ThreadLocalRandom.current().nextInt(hostileMobs.length)];
+         if (this.configManager.isDebugEnabled()) {
+            this.plugin
+               .getLogger()
+               .info("Spawning peripheral ghost " + mobType.name() + " for " + player.getName() + " at distance " + player.getLocation().distance(spawnLoc));
+         }
 
-        Location playerLoc = player.getLocation();
-        Vector playerDir = playerLoc.getDirection();
-
-
-        boolean leftSide = ThreadLocalRandom.current().nextBoolean();
-        double angle = Math.toRadians(90 + ThreadLocalRandom.current().nextInt(30));
-        if (leftSide) angle = -angle;
-
-
-        double x = playerDir.getX();
-        double z = playerDir.getZ();
-
-        double newX = x * Math.cos(angle) - z * Math.sin(angle);
-        double newZ = x * Math.sin(angle) + z * Math.cos(angle);
-
-        Vector direction = new Vector(newX, 0, newZ).normalize();
-
-
-        double distance = 8 + ThreadLocalRandom.current().nextDouble() * 4;
-        Location spawnLoc = playerLoc.clone().add(direction.multiply(distance));
-
-
-        spawnLoc.setY(playerLoc.getY());
-
-
-        spawnLoc = LocationUtils.findSafeLocationNearby(spawnLoc);
-        if (spawnLoc == null) {
-            if (configManager.isDebugEnabled()) {
-                plugin.getLogger().info("Peripheral ghost mob cancelled for " + player.getName() + " - no valid location found");
-            }
-            return;
-        }
-
-
-        EntityType[] hostileMobs = {EntityType.CREEPER, EntityType.ZOMBIE, EntityType.SKELETON, EntityType.SPIDER, EntityType.ENDERMAN};
-
-        EntityType mobType = hostileMobs[ThreadLocalRandom.current().nextInt(hostileMobs.length)];
-
-        if (configManager.isDebugEnabled()) {
-            plugin.getLogger().info("Spawning peripheral ghost " + mobType.name() + " for " + player.getName() + " at distance " + player.getLocation().distance(spawnLoc));
-        }
-
-
-        Entity ghostMob = spawnLoc.getWorld().spawnEntity(spawnLoc, mobType);
-
-
-        ghostMob.setMetadata("ghost_mob", new FixedMetadataValue(plugin, true));
-
-        UUID playerId = player.getUniqueId();
-
-
-        dataHolder.addGhostEntity(playerId, ghostMob);
-
-
-        if (ghostMob instanceof LivingEntity livingMob) {
+         final Entity ghostMob = spawnLoc.getWorld().spawnEntity(spawnLoc, mobType);
+         ghostMob.setPersistent(false);
+         ghostMob.setMetadata("ghost_mob", new FixedMetadataValue(this.plugin, true));
+         final UUID playerId = player.getUniqueId();
+         this.dataHolder.addGhostEntity(playerId, ghostMob);
+         if (ghostMob instanceof LivingEntity livingMob) {
             livingMob.setAI(false);
-
-
             if (mobType == EntityType.ENDERMAN) {
-                Enderman enderman = (Enderman) livingMob;
-                enderman.setTarget(player);
+               Enderman enderman = (Enderman)livingMob;
+               enderman.setTarget(player);
             }
-        }
+         }
 
-
-        int disappearTime = 40 + ThreadLocalRandom.current().nextInt(40);
-
-        new BukkitRunnable() {
+         int disappearTime = 40 + ThreadLocalRandom.current().nextInt(40);
+         (new Schedulers.Repeating() {
             @Override
             public void run() {
+               if (!ghostMob.isDead() && ghostMob.isValid()) {
+                  ghostMob.getWorld().spawnParticle(Particle.SMOKE, ghostMob.getLocation().add(0.0, 1.0, 0.0), 30, 0.3, 0.5, 0.3, 0.05);
+                  ghostMob.remove();
+               }
 
-                if (!ghostMob.isDead() && ghostMob.isValid()) {
-
-                    ghostMob.getWorld().spawnParticle(Particle.SMOKE, ghostMob.getLocation().add(0, 1, 0), 30, 0.3, 0.5, 0.3, 0.05);
-
-
-                    ghostMob.remove();
-                }
-
-
-                dataHolder.removeGhostEntity(playerId, ghostMob);
+               GhostEntityEffect.this.dataHolder.removeGhostEntity(playerId, ghostMob);
             }
-        }.runTaskLater(plugin, disappearTime);
-    }
+         }).entityLater(player, disappearTime);
+      }
+   }
 
-    /**
-     * Creates an illusion of another player mining nearby
-     */
-    public void createFakePlayerSighting(Player player) {
+   public void createFakePlayerSighting(final Player player) {
+      Location playerLoc = player.getLocation();
+      Vector direction = playerLoc.getDirection().normalize();
+      direction.add(
+            new Vector(
+               (ThreadLocalRandom.current().nextDouble() - 0.5) * 0.3,
+               (ThreadLocalRandom.current().nextDouble() - 0.5) * 0.1,
+               (ThreadLocalRandom.current().nextDouble() - 0.5) * 0.3
+            )
+         )
+         .normalize();
+      double distance = 15.0 + ThreadLocalRandom.current().nextDouble() * 10.0;
+      Location spawnLoc = playerLoc.clone().add(direction.multiply(distance));
+      spawnLoc = LocationUtils.findSafeLocationNearby(spawnLoc);
+      if (spawnLoc == null) {
+         if (this.configManager.isDebugEnabled()) {
+            this.plugin.getLogger().info("Fake player sighting cancelled for " + player.getName() + " - no valid location found");
+         }
+      } else {
+         if (this.configManager.isDebugEnabled()) {
+            this.plugin
+               .getLogger()
+               .info("Creating fake player sighting for " + player.getName() + " at distance " + Math.round(player.getLocation().distance(spawnLoc)));
+         }
 
-        Location playerLoc = player.getLocation();
-        Vector direction = playerLoc.getDirection().normalize();
+         final ArmorStand stand = (ArmorStand)spawnLoc.getWorld().spawnEntity(spawnLoc, EntityType.ARMOR_STAND);
+         stand.setPersistent(false);
+         stand.setVisible(false);
+         final UUID playerId = player.getUniqueId();
+         this.dataHolder.addGhostEntity(playerId, stand);
 
+         for (int i = 0; i < 3; i++) {
+            (new Schedulers.Repeating() {
+                  @Override
+                  public void run() {
+                     if (player.isOnline() && !stand.isDead()) {
+                        player.playSound(stand.getLocation(), Sound.BLOCK_STONE_HIT, 0.4F, 1.0F);
+                        player.getWorld()
+                           .spawnParticle(
+                              Particle.FALLING_DUST, stand.getLocation().add(0.0, 1.0, 0.0), 10, 0.2, 0.2, 0.2, 0.05, Bukkit.createBlockData(Material.STONE)
+                           );
+                     }
+                  }
+               })
+               .entityLater(player, i * 10L);
+         }
 
-        direction.add(new Vector((ThreadLocalRandom.current().nextDouble() - 0.5) * 0.3, (ThreadLocalRandom.current().nextDouble() - 0.5) * 0.1, (ThreadLocalRandom.current().nextDouble() - 0.5) * 0.3)).normalize();
-
-        double distance = 15 + ThreadLocalRandom.current().nextDouble() * 10;
-        Location spawnLoc = playerLoc.clone().add(direction.multiply(distance));
-
-
-        spawnLoc = LocationUtils.findSafeLocationNearby(spawnLoc);
-        if (spawnLoc == null) {
-            if (configManager.isDebugEnabled()) {
-                plugin.getLogger().info("Fake player sighting cancelled for " + player.getName() + " - no valid location found");
-            }
-            return;
-        }
-
-        if (configManager.isDebugEnabled()) {
-            plugin.getLogger().info("Creating fake player sighting for " + player.getName() + " at distance " + Math.round(player.getLocation().distance(spawnLoc)));
-        }
-
-
-        ArmorStand stand = (ArmorStand) spawnLoc.getWorld().spawnEntity(spawnLoc, EntityType.ARMOR_STAND);
-        stand.setVisible(false);
-
-
-        UUID playerId = player.getUniqueId();
-        dataHolder.addGhostEntity(playerId, stand);
-
-
-        for (int i = 0; i < 3; i++) {
-            new BukkitRunnable() {
-                @Override
-                public void run() {
-                    if (player.isOnline() && !stand.isDead()) {
-
-                        player.playSound(stand.getLocation(), Sound.BLOCK_STONE_HIT, 0.4f, 1.0f);
-
-
-                        player.getWorld().spawnParticle(Particle.FALLING_DUST, stand.getLocation().add(0, 1, 0), 10, 0.2, 0.2, 0.2, 0.05, Bukkit.createBlockData(Material.STONE));
-                    }
-                }
-            }.runTaskLater(plugin, i * 10L);
-        }
-
-
-        new BukkitRunnable() {
+         (new Schedulers.Repeating() {
             @Override
             public void run() {
-                if (!stand.isDead()) {
-                    stand.remove();
-                }
-                dataHolder.removeGhostEntity(playerId, stand);
+               if (!stand.isDead()) {
+                  stand.remove();
+               }
+
+               GhostEntityEffect.this.dataHolder.removeGhostEntity(playerId, stand);
             }
-        }.runTaskLater(plugin, 40L);
-    }
+         }).entityLater(player, 40L);
+      }
+   }
 
-    /**
-     * Improved fake mob tracking system that makes mobs more interactive
-     */
-    public void trackAndUpdateGhostMobs() {
+   public void trackAndUpdateGhostMobs() {
+      this.trackAndUpdateGhostMobs(null);
+   }
 
-        int totalEntities = 0;
-        int facingUpdates = 0;
-        int pathUpdates = 0;
-        Map<EntityType, Integer> entityTypeStats = new HashMap<>();
+   public void trackAndUpdateGhostMobs(Player only) {
+      int totalEntities = 0;
+      int facingUpdates = 0;
+      int pathUpdates = 0;
+      Map<EntityType, Integer> entityTypeStats = new HashMap<>();
 
+      for (List<Entity> entities : this.dataHolder.getAllGhostEntities().values()) {
+         totalEntities += entities.size();
+      }
 
-        for (List<Entity> entities : dataHolder.getAllGhostEntities().values()) {
-            totalEntities += entities.size();
-        }
+      if (totalEntities != 0) {
+         if (this.configManager.isDebugEnabled()) {
+            this.plugin
+               .getLogger()
+               .info(
+                  "trackAndUpdateGhostMobs running - tracking "
+                     + totalEntities
+                     + " ghost entities for "
+                     + this.dataHolder.getAllGhostEntities().size()
+                     + " players"
+               );
+         }
 
+         int updatedEntities = 0;
+         int activatedEntities = 0;
 
-        if (totalEntities == 0) {
-            return;
-        }
+         for (final UUID playerId : new ArrayList<>(this.dataHolder.getAllGhostEntities().keySet())) {
+            if (only == null || only.getUniqueId().equals(playerId)) {
+               final Player player = Bukkit.getPlayer(playerId);
+               if (player != null && player.isOnline()) {
+                  List<Entity> playerEntities = this.dataHolder.getPlayerGhostEntities(playerId);
+                  if (this.configManager.isDebugEnabled() && !playerEntities.isEmpty()) {
+                     this.plugin.getLogger().info("Processing " + playerEntities.size() + " ghost entities for player " + player.getName());
+                  }
 
-
-        if (configManager.isDebugEnabled()) {
-            plugin.getLogger().info("trackAndUpdateGhostMobs running - tracking " + totalEntities + " ghost entities for " + dataHolder.getAllGhostEntities().size() + " players");
-        }
-
-        int updatedEntities = 0;
-        int activatedEntities = 0;
-
-
-        for (UUID playerId : new ArrayList<>(dataHolder.getAllGhostEntities().keySet())) {
-            Player player = Bukkit.getPlayer(playerId);
-            if (player == null || !player.isOnline()) {
-                if (configManager.isDebugEnabled()) {
-                    plugin.getLogger().info("Skipping ghost update for offline player UUID: " + playerId);
-                }
-                continue;
-            }
-
-            List<Entity> playerEntities = dataHolder.getPlayerGhostEntities(playerId);
-
-            if (configManager.isDebugEnabled() && !playerEntities.isEmpty()) {
-                plugin.getLogger().info("Processing " + playerEntities.size() + " ghost entities for player " + player.getName());
-            }
-
-            for (Entity entity : new ArrayList<>(playerEntities)) {
-                if (entity == null || entity.isDead()) {
-                    dataHolder.removeGhostEntity(playerId, entity);
-                    continue;
-                }
-
-
-                if (configManager.isDebugEnabled()) {
-                    entityTypeStats.put(entity.getType(), entityTypeStats.getOrDefault(entity.getType(), 0) + 1);
-                }
-
-
-                if (ThreadLocalRandom.current().nextBoolean()) {
-                    updatedEntities++;
-
-                    if (entity instanceof LivingEntity livingEntity) {
-
-
-                        if (livingEntity.hasAI()) {
-
-
-                            if (livingEntity instanceof Monster) {
-                                ((Monster) livingEntity).setTarget(player);
-                                pathUpdates++;
-
-                                if (configManager.isDebugEnabled()) {
-                                    plugin.getLogger().info("Updated target path for " + entity.getType() + " ghost entity chasing " + player.getName() + ", distance: " + String.format("%.1f", entity.getLocation().distance(player.getLocation())));
-                                }
-                            }
-                        } else {
-
-                            Vector direction = player.getLocation().toVector().subtract(entity.getLocation().toVector()).normalize();
-                            Location lookLoc = entity.getLocation().setDirection(direction);
-                            entity.teleport(lookLoc);
-                            facingUpdates++;
-
-                            if (configManager.isDebugEnabled() && ThreadLocalRandom.current().nextInt(5) == 0) {
-
-                                plugin.getLogger().info("Updated facing direction for " + entity.getType() + " ghost entity to look at " + player.getName());
-                            }
-
-
-                            if (ThreadLocalRandom.current().nextInt(100) < 10 && entity instanceof Monster && !livingEntity.hasAI()) {
-
-                                livingEntity.setAI(true);
-                                ((Monster) livingEntity).setTarget(player);
-                                activatedEntities++;
-
-                                if (configManager.isDebugEnabled()) {
-                                    plugin.getLogger().info("в… JUMP-SCARE: Activated " + entity.getType() + " ghost entity to charge at " + player.getName() + " from distance " + String.format("%.1f", entity.getLocation().distance(player.getLocation())));
-                                }
-
-
-                                if (entity instanceof Creeper) {
-                                    player.playSound(entity.getLocation(), Sound.ENTITY_CREEPER_PRIMED, 1.0f, 1.0f);
-                                } else if (entity instanceof Zombie) {
-                                    player.playSound(entity.getLocation(), Sound.ENTITY_ZOMBIE_AMBIENT, 1.0f, 0.7f);
-                                } else {
-                                    player.playSound(entity.getLocation(), Sound.ENTITY_HOSTILE_HURT, 0.8f, 0.6f);
-                                }
-
-
-                                new BukkitRunnable() {
-                                    @Override
-                                    public void run() {
-                                        if (!entity.isDead()) {
-                                            if (configManager.isDebugEnabled()) {
-                                                plugin.getLogger().info("Removing charging " + entity.getType() + " ghost entity after jump-scare for " + player.getName());
-                                            }
-
-                                            entity.getWorld().spawnParticle(Particle.SMOKE, entity.getLocation().add(0, 1, 0), 30, 0.3, 0.5, 0.3, 0.05);
-                                            entity.getWorld().spawnParticle(Particle.PORTAL, entity.getLocation().add(0, 1, 0), 20, 0.3, 0.5, 0.3, 0.05);
-                                            entity.remove();
-                                            dataHolder.removeGhostEntity(playerId, entity);
-                                        }
-                                    }
-                                }.runTaskLater(plugin, 40L);
-                            }
+                  for (final Entity entity : new ArrayList<>(playerEntities)) {
+                     if (entity == null || entity.isDead()) {
+                        this.dataHolder.removeGhostEntity(playerId, entity);
+                     } else if (Schedulers.isOwned(entity)) {
+                        if (this.configManager.isDebugEnabled()) {
+                           entityTypeStats.put(entity.getType(), entityTypeStats.getOrDefault(entity.getType(), 0) + 1);
                         }
-                    }
-                }
+
+                        if (ThreadLocalRandom.current().nextBoolean()) {
+                           updatedEntities++;
+                           if (entity instanceof LivingEntity livingEntity) {
+                              if (livingEntity.hasAI()) {
+                                 if (livingEntity instanceof Monster) {
+                                    ((Monster)livingEntity).setTarget(player);
+                                    pathUpdates++;
+                                    if (this.configManager.isDebugEnabled()) {
+                                       this.plugin
+                                          .getLogger()
+                                          .info(
+                                             "Updated target path for "
+                                                + entity.getType()
+                                                + " ghost entity chasing "
+                                                + player.getName()
+                                                + ", distance: "
+                                                + String.format("%.1f", entity.getLocation().distance(player.getLocation()))
+                                          );
+                                    }
+                                 }
+                              } else {
+                                 Vector direction = player.getLocation().toVector().subtract(entity.getLocation().toVector()).normalize();
+                                 Location lookLoc = entity.getLocation().setDirection(direction);
+                                 entity.teleportAsync(lookLoc);
+                                 facingUpdates++;
+                                 if (this.configManager.isDebugEnabled() && ThreadLocalRandom.current().nextInt(5) == 0) {
+                                    this.plugin
+                                       .getLogger()
+                                       .info("Updated facing direction for " + entity.getType() + " ghost entity to look at " + player.getName());
+                                 }
+
+                                 if (ThreadLocalRandom.current().nextInt(100) < 10 && entity instanceof Monster && !livingEntity.hasAI()) {
+                                    livingEntity.setAI(true);
+                                    ((Monster)livingEntity).setTarget(player);
+                                    activatedEntities++;
+                                    if (this.configManager.isDebugEnabled()) {
+                                       this.plugin
+                                          .getLogger()
+                                          .info(
+                                             "в\u0098… JUMP-SCARE: Activated "
+                                                + entity.getType()
+                                                + " ghost entity to charge at "
+                                                + player.getName()
+                                                + " from distance "
+                                                + String.format("%.1f", entity.getLocation().distance(player.getLocation()))
+                                          );
+                                    }
+
+                                    if (entity instanceof Creeper) {
+                                       player.playSound(entity.getLocation(), Sound.ENTITY_CREEPER_PRIMED, 1.0F, 1.0F);
+                                    } else if (entity instanceof Zombie) {
+                                       player.playSound(entity.getLocation(), Sound.ENTITY_ZOMBIE_AMBIENT, 1.0F, 0.7F);
+                                    } else {
+                                       player.playSound(entity.getLocation(), Sound.ENTITY_HOSTILE_HURT, 0.8F, 0.6F);
+                                    }
+
+                                    (new Schedulers.Repeating() {
+                                          @Override
+                                          public void run() {
+                                             if (!entity.isDead()) {
+                                                if (GhostEntityEffect.this.configManager.isDebugEnabled()) {
+                                                   GhostEntityEffect.this.plugin
+                                                      .getLogger()
+                                                      .info("Removing charging " + entity.getType() + " ghost entity after jump-scare for " + player.getName());
+                                                }
+
+                                                entity.getWorld()
+                                                   .spawnParticle(Particle.SMOKE, entity.getLocation().add(0.0, 1.0, 0.0), 30, 0.3, 0.5, 0.3, 0.05);
+                                                entity.getWorld()
+                                                   .spawnParticle(Particle.PORTAL, entity.getLocation().add(0.0, 1.0, 0.0), 20, 0.3, 0.5, 0.3, 0.05);
+                                                entity.remove();
+                                                GhostEntityEffect.this.dataHolder.removeGhostEntity(playerId, entity);
+                                             }
+                                          }
+                                       })
+                                       .entityLater(player, 40L);
+                                 }
+                              }
+                           }
+                        }
+                     }
+                  }
+               } else if (this.configManager.isDebugEnabled()) {
+                  this.plugin.getLogger().info("Skipping ghost update for offline player UUID: " + playerId);
+               }
             }
-        }
+         }
 
-
-        dataHolder.removeDeadEntities();
-
-
-        if (configManager.isDebugEnabled() && (updatedEntities > 0 || activatedEntities > 0)) {
+         this.dataHolder.removeDeadEntities();
+         if (this.configManager.isDebugEnabled() && (updatedEntities > 0 || activatedEntities > 0)) {
             StringBuilder statsLog = new StringBuilder();
             statsLog.append("Ghost tracking stats: ");
             statsLog.append(updatedEntities).append(" entities updated (");
             statsLog.append(pathUpdates).append(" paths, ");
             statsLog.append(facingUpdates).append(" facings), ");
             statsLog.append(activatedEntities).append(" jump-scares activated");
-
-
             if (!entityTypeStats.isEmpty()) {
-                statsLog.append(" - Types: ");
-                for (Map.Entry<EntityType, Integer> entry : entityTypeStats.entrySet()) {
-                    statsLog.append(entry.getKey().name()).append("(").append(entry.getValue()).append(") ");
-                }
+               statsLog.append(" - Types: ");
+
+               for (Entry<EntityType, Integer> entry : entityTypeStats.entrySet()) {
+                  statsLog.append(entry.getKey().name()).append("(").append(entry.getValue()).append(") ");
+               }
             }
 
-            plugin.getLogger().info(statsLog.toString());
-        }
-    }
+            this.plugin.getLogger().info(statsLog.toString());
+         }
+      }
+   }
 
-    /**
-     * Clean up all ghost entities
-     */
-    public void cleanup() {
-        int removedEntities = 0;
-
-
-        dataHolder.cleanupAllGhostEntities();
-
-
-        for (World world : Bukkit.getWorlds()) {
+   public void cleanup() {
+      int removedEntities = 0;
+      this.dataHolder.cleanupAllGhostEntities();
+      if (!SchedulerUtils.isFolia()) {
+         for (World world : Bukkit.getWorlds()) {
             for (Entity entity : world.getEntities()) {
-                if (entity.hasMetadata("nightmare_ghost") || entity.hasMetadata("ghost_mob")) {
-                    entity.remove();
-                    removedEntities++;
-                }
+               if (entity.hasMetadata("nightmare_ghost") || entity.hasMetadata("ghost_mob")) {
+                  entity.remove();
+                  removedEntities++;
+               }
             }
-        }
+         }
+      }
 
-        if (configManager.isDebugEnabled()) {
-            plugin.getLogger().info("GhostEntityEffect cleanup: removed " + removedEntities + " remaining entities");
-        }
-    }
+      if (this.configManager.isDebugEnabled()) {
+         this.plugin.getLogger().info("GhostEntityEffect cleanup: removed " + removedEntities + " remaining entities");
+      }
+   }
 }

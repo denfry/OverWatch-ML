@@ -1,266 +1,200 @@
 package net.denfry.owml.utils;
 
-import net.denfry.owml.OverWatchML;
-import org.jetbrains.annotations.NotNull;
-
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryUsage;
 import java.util.concurrent.atomic.AtomicLong;
+import net.denfry.owml.OverWatchML;
+import org.bukkit.Bukkit;
+import org.jetbrains.annotations.NotNull;
 
-/**
- * Performance monitoring system for OverWatch-ML.
- * Tracks TPS, MSPT, memory usage, and plugin performance impact.
- *
- * @author OverWatch Team
- * @version 1.0.0
- * @since 1.8.1
- */
 public class PerformanceMonitor {
+   private static final OverWatchML plugin = OverWatchML.getInstance();
+   private static final long[] tickTimes = new long[600];
+   private static int tickIndex = 0;
+   private static long lastTickTime = System.nanoTime();
+   private static final AtomicLong blockBreakChecks = new AtomicLong(0L);
+   private static final AtomicLong mlAnalysisRuns = new AtomicLong(0L);
+   private static final AtomicLong alertTriggers = new AtomicLong(0L);
+   private static final AtomicLong dataSaveOperations = new AtomicLong(0L);
+   private static final MemoryMXBean memoryBean = ManagementFactory.getMemoryMXBean();
+   private static final double TPS_WARNING_THRESHOLD = 18.0;
+   private static final double TPS_CRITICAL_THRESHOLD = 15.0;
+   private static final long MSPT_WARNING_THRESHOLD = 50000000L;
+   private static final double MEMORY_WARNING_PERCENT = 85.0;
 
-    private static final OverWatchML plugin = OverWatchML.getInstance();
+   private static void updateMetrics() {
+      long currentTime = System.nanoTime();
+      long tickDuration = currentTime - lastTickTime;
+      lastTickTime = currentTime;
+      tickTimes[tickIndex] = tickDuration;
+      tickIndex = (tickIndex + 1) % tickTimes.length;
+   }
 
-    // TPS and timing metrics
-    private static final long[] tickTimes = new long[600]; // Last 30 seconds * 20 TPS
-    private static int tickIndex = 0;
-    private static long lastTickTime = System.nanoTime();
+   private static void logPerformanceWarnings() {
+      double tps = getTPS();
+      long mspt = getMSPT();
+      double memoryPercent = getMemoryUsagePercent();
+      if (tps <= 15.0) {
+         MessageManager.log("error", "Critical TPS drop detected: {TPS}", "TPS", String.format("%.1f", tps));
+      } else if (tps <= 18.0) {
+         MessageManager.log("warning", "Low TPS detected: {TPS}", "TPS", String.format("%.1f", tps));
+      }
 
-    // Performance counters
-    private static final AtomicLong blockBreakChecks = new AtomicLong(0);
-    private static final AtomicLong mlAnalysisRuns = new AtomicLong(0);
-    private static final AtomicLong alertTriggers = new AtomicLong(0);
-    private static final AtomicLong dataSaveOperations = new AtomicLong(0);
+      if (mspt >= 50000000L) {
+         MessageManager.log("warning", "High MSPT detected: {MSPT}ms", "MSPT", String.format("%.1f", mspt / 1000000.0));
+      }
 
-    // Memory monitoring
-    private static final MemoryMXBean memoryBean = ManagementFactory.getMemoryMXBean();
+      if (memoryPercent >= 85.0) {
+         MessageManager.log("warning", "High memory usage: {USAGE}%", "USAGE", String.format("%.1f", memoryPercent));
+      }
+   }
 
-    // Performance thresholds
-    private static final double TPS_WARNING_THRESHOLD = 18.0;
-    private static final double TPS_CRITICAL_THRESHOLD = 15.0;
-    private static final long MSPT_WARNING_THRESHOLD = 50000000L; // 50ms in nanoseconds
-    private static final double MEMORY_WARNING_PERCENT = 85.0;
+   public static double getTPS() {
+      try {
+         double[] tps = Bukkit.getTPS();
+         return tps[0];
+      } catch (Throwable var9) {
+         long total = 0L;
+         int n = 0;
 
-    static {
-        // Start monitoring task - every 20 ticks (1 second) for accurate TPS calculation
-        SchedulerUtils.runTaskTimer(plugin, PerformanceMonitor::updateMetrics, 20L, 20L);
-
-        // Start performance logging task - every minute
-        SchedulerUtils.runTaskTimer(plugin, PerformanceMonitor::logPerformanceWarnings, 1200L, 1200L);
-    }
-
-    /**
-     * Update performance metrics.
-     */
-    private static void updateMetrics() {
-        long currentTime = System.nanoTime();
-        long tickDuration = currentTime - lastTickTime;
-        lastTickTime = currentTime;
-
-        tickTimes[tickIndex] = tickDuration;
-        tickIndex = (tickIndex + 1) % tickTimes.length;
-    }
-
-    /**
-     * Log performance warnings if thresholds are exceeded.
-     */
-    private static void logPerformanceWarnings() {
-        double tps = getTPS();
-        long mspt = getMSPT();
-        double memoryPercent = getMemoryUsagePercent();
-
-        // TPS warnings
-        if (tps <= TPS_CRITICAL_THRESHOLD) {
-            MessageManager.log("error", "Critical TPS drop detected: {TPS}", "TPS", String.format("%.1f", tps));
-        } else if (tps <= TPS_WARNING_THRESHOLD) {
-            MessageManager.log("warning", "Low TPS detected: {TPS}", "TPS", String.format("%.1f", tps));
-        }
-
-        // MSPT warnings
-        if (mspt >= MSPT_WARNING_THRESHOLD) {
-            MessageManager.log("warning", "High MSPT detected: {MSPT}ms", "MSPT", String.format("%.1f", mspt / 1_000_000.0));
-        }
-
-        // Memory warnings
-        if (memoryPercent >= MEMORY_WARNING_PERCENT) {
-            MessageManager.log("warning", "High memory usage: {USAGE}%", "USAGE", String.format("%.1f", memoryPercent));
-        }
-    }
-
-    /**
-     * Get current TPS (Ticks Per Second).
-     */
-    public static double getTPS() {
-        double[] tps = org.bukkit.Bukkit.getTPS();
-        return tps[0];
-    }
-
-    /**
-     * Get current MSPT (Milliseconds Per Tick).
-     */
-    public static long getMSPT() {
-        long totalTime = 0;
-        int validTicks = 0;
-
-        for (long tickTime : tickTimes) {
-            if (tickTime > 0) {
-                totalTime += tickTime;
-                validTicks++;
+         for (long t : tickTimes) {
+            if (t > 0L) {
+               total += t;
+               n++;
             }
-        }
+         }
 
-        if (validTicks == 0) return 0;
+         if (n == 0) {
+            return 20.0;
+         } else {
+            double secondsPer20Ticks = (double)total / n / 1.0E9;
+            return Math.min(20.0, 20.0 / Math.max(secondsPer20Ticks, 1.0E-6));
+         }
+      }
+   }
 
-        return (totalTime / validTicks) / 1_000_000; // Convert to milliseconds
-    }
+   public static long getMSPT() {
+      long totalTime = 0L;
+      int validTicks = 0;
 
-    /**
-     * Get memory usage percentage.
-     */
-    public static double getMemoryUsagePercent() {
-        MemoryUsage heapUsage = memoryBean.getHeapMemoryUsage();
-        long used = heapUsage.getUsed();
-        long max = heapUsage.getMax();
+      for (long tickTime : tickTimes) {
+         if (tickTime > 0L) {
+            totalTime += tickTime;
+            validTicks++;
+         }
+      }
 
-        if (max == 0) return 0.0;
+      return validTicks == 0 ? 0L : totalTime / validTicks / 1000000L;
+   }
 
-        return ((double) used / max) * 100.0;
-    }
+   public static double getMemoryUsagePercent() {
+      MemoryUsage heapUsage = memoryBean.getHeapMemoryUsage();
+      long used = heapUsage.getUsed();
+      long max = heapUsage.getMax();
+      return max == 0L ? 0.0 : (double)used / max * 100.0;
+   }
 
-    /**
-     * Get memory usage in MB.
-     */
-    public static long getMemoryUsageMB() {
-        MemoryUsage heapUsage = memoryBean.getHeapMemoryUsage();
-        return heapUsage.getUsed() / (1024 * 1024);
-    }
+   public static long getMemoryUsageMB() {
+      MemoryUsage heapUsage = memoryBean.getHeapMemoryUsage();
+      return heapUsage.getUsed() / 1048576L;
+   }
 
-    /**
-     * Get maximum memory in MB.
-     */
-    public static long getMaxMemoryMB() {
-        MemoryUsage heapUsage = memoryBean.getHeapMemoryUsage();
-        return heapUsage.getMax() / (1024 * 1024);
-    }
+   public static long getMaxMemoryMB() {
+      MemoryUsage heapUsage = memoryBean.getHeapMemoryUsage();
+      return heapUsage.getMax() / 1048576L;
+   }
 
-    /**
-     * Record a block break check operation.
-     */
-    public static void recordBlockBreakCheck() {
-        blockBreakChecks.incrementAndGet();
-    }
+   public static void recordBlockBreakCheck() {
+      blockBreakChecks.incrementAndGet();
+   }
 
-    /**
-     * Record an ML analysis operation.
-     */
-    public static void recordMLAnalysis() {
-        mlAnalysisRuns.incrementAndGet();
-    }
+   public static void recordMLAnalysis() {
+      mlAnalysisRuns.incrementAndGet();
+   }
 
-    /**
-     * Record an alert trigger.
-     */
-    public static void recordAlertTrigger() {
-        alertTriggers.incrementAndGet();
-    }
+   public static void recordAlertTrigger() {
+      alertTriggers.incrementAndGet();
+   }
 
-    /**
-     * Record a data save operation.
-     */
-    public static void recordDataSave() {
-        dataSaveOperations.incrementAndGet();
-    }
+   public static void recordDataSave() {
+      dataSaveOperations.incrementAndGet();
+   }
 
-    /**
-     * Get performance statistics.
-     */
-    @NotNull
-    public static PerformanceStats getStats() {
-        return new PerformanceStats(
-            getTPS(),
-            getMSPT(),
-            getMemoryUsageMB(),
-            getMaxMemoryMB(),
-            blockBreakChecks.get(),
-            mlAnalysisRuns.get(),
-            alertTriggers.get(),
-            dataSaveOperations.get()
-        );
-    }
+   @NotNull
+   public static PerformanceMonitor.PerformanceStats getStats() {
+      return new PerformanceMonitor.PerformanceStats(
+         getTPS(), getMSPT(), getMemoryUsageMB(), getMaxMemoryMB(), blockBreakChecks.get(), mlAnalysisRuns.get(), alertTriggers.get(), dataSaveOperations.get()
+      );
+   }
 
-    /**
-     * Reset performance counters.
-     */
-    public static void resetCounters() {
-        blockBreakChecks.set(0);
-        mlAnalysisRuns.set(0);
-        alertTriggers.set(0);
-        dataSaveOperations.set(0);
-    }
+   public static void resetCounters() {
+      blockBreakChecks.set(0L);
+      mlAnalysisRuns.set(0L);
+      alertTriggers.set(0L);
+      dataSaveOperations.set(0L);
+   }
 
-    /**
-     * Get TPS impact percentage of this plugin.
-     * This is an estimation based on plugin activity.
-     */
-    public static double getEstimatedPluginTPSImpact() {
-        long totalOperations = blockBreakChecks.get() + mlAnalysisRuns.get() +
-                             alertTriggers.get() + dataSaveOperations.get();
+   public static double getEstimatedPluginTPSImpact() {
+      long totalOperations = blockBreakChecks.get() + mlAnalysisRuns.get() + alertTriggers.get() + dataSaveOperations.get();
+      if (totalOperations == 0L) {
+         return 0.0;
+      } else {
+         double estimatedTimeMs = totalOperations * 0.01;
+         double estimatedTPSImpact = estimatedTimeMs / 50.0 * 20.0;
+         return Math.min(estimatedTPSImpact, getTPS() * 0.1);
+      }
+   }
 
-        if (totalOperations == 0) return 0.0;
+   public static boolean isPerformanceDegraded() {
+      return getTPS() < 18.0 || getMSPT() > 50000000L || getMemoryUsagePercent() > 85.0;
+   }
 
-        // Rough estimation: each operation takes ~0.01ms
-        double estimatedTimeMs = totalOperations * 0.01;
-        double estimatedTPSImpact = (estimatedTimeMs / 50.0) * 20.0; // Convert to TPS loss
+   public static double getCurrentTPS() {
+      return getTPS();
+   }
 
-        return Math.min(estimatedTPSImpact, getTPS() * 0.1); // Cap at 10% of current TPS
-    }
+   static {
+      SchedulerUtils.runTaskTimer(plugin, PerformanceMonitor::updateMetrics, 20L, 20L);
+      SchedulerUtils.runTaskTimer(plugin, PerformanceMonitor::logPerformanceWarnings, 1200L, 1200L);
+   }
 
-    /**
-     * Check if server performance is degraded.
-     */
-    public static boolean isPerformanceDegraded() {
-        return getTPS() < TPS_WARNING_THRESHOLD ||
-               getMSPT() > MSPT_WARNING_THRESHOLD ||
-               getMemoryUsagePercent() > MEMORY_WARNING_PERCENT;
-    }
+   public static class PerformanceStats {
+      public final double tps;
+      public final long mspt;
+      public final long memoryUsedMB;
+      public final long memoryMaxMB;
+      public final long blockBreakChecks;
+      public final long mlAnalysisRuns;
+      public final long alertTriggers;
+      public final long dataSaveOperations;
 
-    /**
-     * Performance statistics data class.
-     */
-    public static class PerformanceStats {
-        public final double tps;
-        public final long mspt;
-        public final long memoryUsedMB;
-        public final long memoryMaxMB;
-        public final long blockBreakChecks;
-        public final long mlAnalysisRuns;
-        public final long alertTriggers;
-        public final long dataSaveOperations;
+      public PerformanceStats(
+         double tps, long mspt, long memoryUsedMB, long memoryMaxMB, long blockBreakChecks, long mlAnalysisRuns, long alertTriggers, long dataSaveOperations
+      ) {
+         this.tps = tps;
+         this.mspt = mspt;
+         this.memoryUsedMB = memoryUsedMB;
+         this.memoryMaxMB = memoryMaxMB;
+         this.blockBreakChecks = blockBreakChecks;
+         this.mlAnalysisRuns = mlAnalysisRuns;
+         this.alertTriggers = alertTriggers;
+         this.dataSaveOperations = dataSaveOperations;
+      }
 
-        public PerformanceStats(double tps, long mspt, long memoryUsedMB, long memoryMaxMB,
-                              long blockBreakChecks, long mlAnalysisRuns, long alertTriggers, long dataSaveOperations) {
-            this.tps = tps;
-            this.mspt = mspt;
-            this.memoryUsedMB = memoryUsedMB;
-            this.memoryMaxMB = memoryMaxMB;
-            this.blockBreakChecks = blockBreakChecks;
-            this.mlAnalysisRuns = mlAnalysisRuns;
-            this.alertTriggers = alertTriggers;
-            this.dataSaveOperations = dataSaveOperations;
-        }
-
-        @Override
-        public String toString() {
-            return String.format("TPS: %.1f, MSPT: %dms, Memory: %d/%dMB, Operations: %d checks, %d ML, %d alerts, %d saves",
-                tps, mspt, memoryUsedMB, memoryMaxMB, blockBreakChecks, mlAnalysisRuns, alertTriggers, dataSaveOperations);
-        }
-    }
-
-    /**
-     * Get the current TPS (Ticks Per Second).
-     *
-     * @return current TPS value
-     */
-    public static double getCurrentTPS() {
-        return getTPS();
-    }
+      @Override
+      public String toString() {
+         return String.format(
+            "TPS: %.1f, MSPT: %dms, Memory: %d/%dMB, Operations: %d checks, %d ML, %d alerts, %d saves",
+            this.tps,
+            this.mspt,
+            this.memoryUsedMB,
+            this.memoryMaxMB,
+            this.blockBreakChecks,
+            this.mlAnalysisRuns,
+            this.alertTriggers,
+            this.dataSaveOperations
+         );
+      }
+   }
 }

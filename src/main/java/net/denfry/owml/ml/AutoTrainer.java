@@ -1,528 +1,421 @@
 package net.denfry.owml.ml;
 
-import net.denfry.owml.OverWatchML;
-import net.denfry.owml.utils.AsyncExecutor;
-import net.denfry.owml.utils.MessageManager;
-
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Queue;
+import java.util.Random;
+import java.util.UUID;
+import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
+import net.denfry.owml.OverWatchML;
+import net.denfry.owml.utils.MessageManager;
+import net.denfry.owml.utils.Schedulers;
 
-/**
- * Automatic ML trainer that generates training data and learns from existing patterns.
- * Features:
- * - Synthetic data generation based on behavior patterns
- * - Automatic pattern discovery and learning
- * - Self-supervised learning from unlabeled data
- * - Continuous model improvement
- *
- * @author OverWatch Team
- * @version 1.1.0
- * @since 1.8.5
- */
 public class AutoTrainer {
+   private static final OverWatchML plugin = OverWatchML.getInstance();
+   private final Map<String, AutoTrainer.BehaviorPattern> learnedPatterns = new ConcurrentHashMap<>();
+   private final Map<UUID, AutoTrainer.PlayerBehaviorProfile> playerProfiles = new ConcurrentHashMap<>();
+   private final Map<String, AutoTrainer.FeatureDistribution> featureDistributions = new ConcurrentHashMap<>();
+   private final Queue<AutoTrainer.UnlabeledSample> unlabeledData = new ConcurrentLinkedQueue<>();
+   private final AtomicLong syntheticSamplesGenerated = new AtomicLong(0L);
+   private volatile double confidenceThreshold = 0.8;
+   private volatile int minPatternSamples = 50;
+   private volatile int maxSyntheticSamplesPerPattern = 1000;
+   private volatile boolean autoGenerateEnabled = true;
+   private volatile long lastAutoTraining = System.currentTimeMillis();
+   private volatile long autoTrainingInterval = 1800000L;
 
-    private static final OverWatchML plugin = OverWatchML.getInstance();
+   public AutoTrainer() {
+      this.initializePatternLearning();
+      this.startAutoLearningLoop();
+   }
 
-    // Pattern learning - thread-safe maps
-    private final Map<String, BehaviorPattern> learnedPatterns = new ConcurrentHashMap<>();
-    private final Map<UUID, PlayerBehaviorProfile> playerProfiles = new ConcurrentHashMap<>();
+   private void initializePatternLearning() {
+      this.learnedPatterns.put("normal_mining", new AutoTrainer.BehaviorPattern("normal_mining"));
+      this.learnedPatterns.put("efficient_mining", new AutoTrainer.BehaviorPattern("efficient_mining"));
+      this.learnedPatterns.put("random_mining", new AutoTrainer.BehaviorPattern("random_mining"));
+      this.learnedPatterns.put("tunnel_mining", new AutoTrainer.BehaviorPattern("tunnel_mining"));
+      this.learnedPatterns.put("xray_suspicious", new AutoTrainer.BehaviorPattern("xray_suspicious"));
+      MessageManager.log("info", "AutoTrainer initialized with {COUNT} behavior patterns", "COUNT", String.valueOf(this.learnedPatterns.size()));
+   }
 
-    // Data generation - thread-safe queue and distributions
-    private final Map<String, FeatureDistribution> featureDistributions = new ConcurrentHashMap<>();
-    private final Queue<UnlabeledSample> unlabeledData = new ConcurrentLinkedQueue<>();
-    private final AtomicLong syntheticSamplesGenerated = new AtomicLong(0);
-
-    // Learning parameters
-    private volatile double confidenceThreshold = 0.8;
-    private volatile int minPatternSamples = 50;
-    private volatile int maxSyntheticSamplesPerPattern = 1000;
-    private volatile boolean autoGenerateEnabled = true;
-
-    // Training scheduler
-    private volatile long lastAutoTraining = System.currentTimeMillis();
-    private volatile long autoTrainingInterval = 30 * 60 * 1000; // 30 minutes
-
-    public AutoTrainer() {
-        initializePatternLearning();
-        startAutoLearningLoop();
-    }
-
-    /**
-     * Initialize pattern learning system
-     */
-    private void initializePatternLearning() {
-        // Initialize common behavior patterns
-        learnedPatterns.put("normal_mining", new BehaviorPattern("normal_mining"));
-        learnedPatterns.put("efficient_mining", new BehaviorPattern("efficient_mining"));
-        learnedPatterns.put("random_mining", new BehaviorPattern("random_mining"));
-        learnedPatterns.put("tunnel_mining", new BehaviorPattern("tunnel_mining"));
-        learnedPatterns.put("xray_suspicious", new BehaviorPattern("xray_suspicious"));
-
-        MessageManager.log("info", "AutoTrainer initialized with {COUNT} behavior patterns",
-            "COUNT", String.valueOf(learnedPatterns.size()));
-    }
-
-    /**
-     * Start automatic learning loop
-     */
-    private void startAutoLearningLoop() {
-        // Schedule periodic auto-training using plugin scheduler
-        plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin, () -> {
-            try {
-                if (autoGenerateEnabled && shouldPerformAutoTraining()) {
-                    performAutoTraining();
-                }
-            } catch (Exception e) {
-                MessageManager.log("error", "Error in auto-training loop: {ERROR}", "ERROR", e.getMessage());
+   private void startAutoLearningLoop() {
+      Schedulers.asyncTimer(() -> {
+         try {
+            if (this.autoGenerateEnabled && this.shouldPerformAutoTraining()) {
+               this.performAutoTraining();
             }
-        }, 1200L, 1200L); // Check every minute (1200 ticks)
+         } catch (Exception var2) {
+            MessageManager.log("error", "Error in auto-training loop: {ERROR}", "ERROR", var2.getMessage());
+         }
+      }, 1200L, 1200L);
+      MessageManager.log("info", "Auto-training loop started");
+   }
 
-        MessageManager.log("info", "Auto-training loop started");
-    }
+   private boolean shouldPerformAutoTraining() {
+      long timeSinceLastTraining = System.currentTimeMillis() - this.lastAutoTraining;
+      return timeSinceLastTraining >= this.autoTrainingInterval && this.unlabeledData.size() >= 50;
+   }
 
-    /**
-     * Check if auto-training should be performed
-     */
-    private boolean shouldPerformAutoTraining() {
-        long timeSinceLastTraining = System.currentTimeMillis() - lastAutoTraining;
-        // Require at least 50 samples instead of 100 for more frequent learning during startup
-        return timeSinceLastTraining >= autoTrainingInterval && unlabeledData.size() >= 50;
-    }
+   private void performAutoTraining() {
+      this.lastAutoTraining = System.currentTimeMillis();
+      MessageManager.log("info", "Starting auto-training cycle with {COUNT} unlabeled samples", "COUNT", String.valueOf(this.unlabeledData.size()));
+      this.learnFromUnlabeledData();
+      this.updateFeatureDistributions();
+      this.generateSyntheticData();
+      this.refinePatterns();
+      MessageManager.log(
+         "info", "Auto-training cycle completed. Total synthetic samples: {COUNT}", "COUNT", String.valueOf(this.syntheticSamplesGenerated.get())
+      );
+   }
 
-    /**
-     * Perform automatic training cycle
-     */
-    private void performAutoTraining() {
-        lastAutoTraining = System.currentTimeMillis();
+   private void learnFromUnlabeledData() {
+      List<AutoTrainer.UnlabeledSample> samples = new ArrayList<>();
+      int processed = 0;
 
-        MessageManager.log("info", "Starting auto-training cycle with {COUNT} unlabeled samples",
-            "COUNT", String.valueOf(unlabeledData.size()));
+      while (!this.unlabeledData.isEmpty() && processed < 1000) {
+         AutoTrainer.UnlabeledSample sample = this.unlabeledData.poll();
+         if (sample != null) {
+            samples.add(sample);
+            processed++;
+         }
+      }
 
-        // Step 1: Learn from unlabeled data
-        learnFromUnlabeledData();
+      for (AutoTrainer.UnlabeledSample sample : samples) {
+         this.classifyAndLearnFromSample(sample);
+      }
 
-        // Step 2: Update feature distributions
-        updateFeatureDistributions();
+      if (processed > 0) {
+         MessageManager.log("info", "Processed {COUNT} unlabeled samples for pattern learning", "COUNT", String.valueOf(processed));
+      }
+   }
 
-        // Step 3: Generate synthetic training data
-        generateSyntheticData();
+   private void classifyAndLearnFromSample(AutoTrainer.UnlabeledSample sample) {
+      String bestPattern = this.findBestMatchingPattern(sample);
+      if (bestPattern != null) {
+         AutoTrainer.BehaviorPattern pattern = this.learnedPatterns.get(bestPattern);
+         pattern.addSample(sample.features, sample.confidence);
+         this.updatePlayerProfile(sample.playerId, bestPattern, sample.features);
+      }
+   }
 
-        // Step 4: Improve existing patterns
-        refinePatterns();
+   private String findBestMatchingPattern(AutoTrainer.UnlabeledSample sample) {
+      String bestPattern = null;
+      double bestScore = 0.0;
 
-        MessageManager.log("info", "Auto-training cycle completed. Total synthetic samples: {COUNT}",
-            "COUNT", String.valueOf(syntheticSamplesGenerated.get()));
-    }
+      for (Entry<String, AutoTrainer.BehaviorPattern> entry : this.learnedPatterns.entrySet()) {
+         double score = entry.getValue().calculateMatchScore(sample.features);
+         if (score > bestScore && score > this.confidenceThreshold) {
+            bestScore = score;
+            bestPattern = entry.getKey();
+         }
+      }
 
-    /**
-     * Learn behavior patterns from unlabeled player data
-     */
-    private void learnFromUnlabeledData() {
-        List<UnlabeledSample> samples = new ArrayList<>();
-        int processed = 0;
+      return bestPattern;
+   }
 
-        // Collect samples for processing - ConcurrentLinkedQueue is safe
-        while (!unlabeledData.isEmpty() && processed < 1000) { // Increased batch size
-            UnlabeledSample sample = unlabeledData.poll();
-            if (sample != null) {
-                samples.add(sample);
-                processed++;
+   private void updatePlayerProfile(UUID playerId, String pattern, Map<String, Double> features) {
+      AutoTrainer.PlayerBehaviorProfile profile = this.playerProfiles.computeIfAbsent(playerId, k -> new AutoTrainer.PlayerBehaviorProfile(playerId));
+      profile.updatePattern(pattern, features);
+      profile.updateLastActivity();
+   }
+
+   private void updateFeatureDistributions() {
+      for (AutoTrainer.BehaviorPattern pattern : this.learnedPatterns.values()) {
+         Map<String, Double> patternFeatures = pattern.getAverageFeatures();
+
+         for (Entry<String, Double> entry : patternFeatures.entrySet()) {
+            String featureName = entry.getKey();
+            double value = entry.getValue();
+            AutoTrainer.FeatureDistribution dist = this.featureDistributions
+               .computeIfAbsent(featureName, k -> new AutoTrainer.FeatureDistribution(featureName));
+            dist.update(value, pattern.getSampleCount());
+         }
+      }
+   }
+
+   private void generateSyntheticData() {
+      for (AutoTrainer.BehaviorPattern pattern : this.learnedPatterns.values()) {
+         if (pattern.getSampleCount() >= this.minPatternSamples) {
+            int samplesToGenerate = Math.min(this.maxSyntheticSamplesPerPattern - pattern.getSyntheticSamplesGenerated(), 100);
+
+            for (int i = 0; i < samplesToGenerate; i++) {
+               Map<String, Double> syntheticFeatures = pattern.generateSyntheticSample();
+               if (syntheticFeatures != null) {
+                  this.addSyntheticTrainingSample(pattern.getName(), syntheticFeatures);
+                  pattern.incrementSyntheticSamples();
+                  this.syntheticSamplesGenerated.incrementAndGet();
+               }
             }
-        }
+         }
+      }
+   }
 
-        // Process samples and update patterns
-        for (UnlabeledSample sample : samples) {
-            classifyAndLearnFromSample(sample);
-        }
+   private void addSyntheticTrainingSample(String patternName, Map<String, Double> features) {
+      try {
+         boolean isCheater = patternName.contains("xray") || patternName.contains("suspicious");
+         Map<String, Object> trainingSample = new HashMap<>();
+         trainingSample.put("features", new HashMap<>(features));
+         trainingSample.put("label", isCheater ? "cheater" : "normal");
+         trainingSample.put("source", "synthetic_" + patternName);
+         trainingSample.put("timestamp", System.currentTimeMillis());
+         MLDataManager.saveSyntheticTrainingSample(trainingSample);
+      } catch (Exception var5) {
+         MessageManager.log("warning", "Failed to save synthetic training sample: {ERROR}", "ERROR", var5.getMessage());
+      }
+   }
 
-        if (processed > 0) {
-            MessageManager.log("info", "Processed {COUNT} unlabeled samples for pattern learning",
-                "COUNT", String.valueOf(processed));
-        }
-    }
+   private void refinePatterns() {
+      for (AutoTrainer.BehaviorPattern pattern : this.learnedPatterns.values()) {
+         pattern.refinePattern();
+      }
+   }
 
-    /**
-     * Classify sample and learn from it
-     */
-    private void classifyAndLearnFromSample(UnlabeledSample sample) {
-        // Find best matching pattern
-        String bestPattern = findBestMatchingPattern(sample);
-        if (bestPattern != null) {
-            BehaviorPattern pattern = learnedPatterns.get(bestPattern);
+   public void addUnlabeledSample(UUID playerId, Map<String, Double> features, double confidence) {
+      if (this.unlabeledData.size() < 20000) {
+         this.unlabeledData.add(new AutoTrainer.UnlabeledSample(playerId, features, confidence));
+      }
+   }
 
-            // Add sample to pattern (now thread-safe)
-            pattern.addSample(sample.features, sample.confidence);
+   public Map<String, Object> getLearningStats() {
+      Map<String, Object> stats = new HashMap<>();
+      stats.put("patternsLearned", this.learnedPatterns.size());
+      stats.put("unlabeledSamplesQueued", this.unlabeledData.size());
+      stats.put("syntheticSamplesGenerated", this.syntheticSamplesGenerated.get());
+      stats.put("playerProfiles", this.playerProfiles.size());
+      stats.put("featureDistributions", this.featureDistributions.size());
+      stats.put("autoGenerateEnabled", this.autoGenerateEnabled);
+      stats.put("confidenceThreshold", this.confidenceThreshold);
+      return stats;
+   }
 
-            // Update player profile
-            updatePlayerProfile(sample.playerId, bestPattern, sample.features);
-        }
-    }
+   public void setAutoGenerateEnabled(boolean enabled) {
+      this.autoGenerateEnabled = enabled;
+      MessageManager.log("info", "Auto-training " + (enabled ? "enabled" : "disabled"));
+   }
 
-    /**
-     * Find best matching behavior pattern for a sample
-     */
-    private String findBestMatchingPattern(UnlabeledSample sample) {
-        String bestPattern = null;
-        double bestScore = 0.0;
+   public void setConfidenceThreshold(double threshold) {
+      this.confidenceThreshold = Math.max(0.1, Math.min(1.0, threshold));
+   }
 
-        for (Map.Entry<String, BehaviorPattern> entry : learnedPatterns.entrySet()) {
-            double score = entry.getValue().calculateMatchScore(sample.features);
-            if (score > bestScore && score > confidenceThreshold) {
-                bestScore = score;
-                bestPattern = entry.getKey();
+   private static class BehaviorPattern {
+      private final String name;
+      private final List<Map<String, Double>> samples = new ArrayList<>();
+      private final Map<String, Double> featureSums = new ConcurrentHashMap<>();
+      private final Map<String, Double> featureMeans = new ConcurrentHashMap<>();
+      private final Map<String, Double> featureVariances = new ConcurrentHashMap<>();
+      private int syntheticSamplesGenerated = 0;
+
+      public BehaviorPattern(String name) {
+         this.name = name;
+      }
+
+      public synchronized void addSample(Map<String, Double> features, double confidence) {
+         this.samples.add(new HashMap<>(features));
+
+         for (Entry<String, Double> entry : features.entrySet()) {
+            String feature = entry.getKey();
+            double value = entry.getValue();
+            this.featureSums.put(feature, this.featureSums.getOrDefault(feature, 0.0) + value);
+         }
+
+         if (this.samples.size() > 2000) {
+            Map<String, Double> removed = this.samples.remove(0);
+
+            for (Entry<String, Double> entry : removed.entrySet()) {
+               String feature = entry.getKey();
+               double value = entry.getValue();
+               this.featureSums.put(feature, Math.max(0.0, this.featureSums.getOrDefault(feature, 0.0) - value));
             }
-        }
+         }
+      }
 
-        return bestPattern;
-    }
-
-    /**
-     * Update player behavior profile
-     */
-    private void updatePlayerProfile(UUID playerId, String pattern, Map<String, Double> features) {
-        PlayerBehaviorProfile profile = playerProfiles.computeIfAbsent(playerId,
-            k -> new PlayerBehaviorProfile(playerId));
-
-        profile.updatePattern(pattern, features);
-        profile.updateLastActivity();
-    }
-
-    /**
-     * Update feature distributions for synthetic data generation
-     */
-    private void updateFeatureDistributions() {
-        for (BehaviorPattern pattern : learnedPatterns.values()) {
-            Map<String, Double> patternFeatures = pattern.getAverageFeatures();
-
-            for (Map.Entry<String, Double> entry : patternFeatures.entrySet()) {
-                String featureName = entry.getKey();
-                double value = entry.getValue();
-
-                FeatureDistribution dist = featureDistributions.computeIfAbsent(featureName,
-                    k -> new FeatureDistribution(featureName));
-                dist.update(value, pattern.getSampleCount());
-            }
-        }
-    }
-
-    /**
-     * Generate synthetic training data based on learned patterns
-     */
-    private void generateSyntheticData() {
-        for (BehaviorPattern pattern : learnedPatterns.values()) {
-            if (pattern.getSampleCount() >= minPatternSamples) {
-                int samplesToGenerate = Math.min(
-                    maxSyntheticSamplesPerPattern - pattern.getSyntheticSamplesGenerated(),
-                    100 // Generate max 100 samples per pattern per cycle
-                );
-
-                for (int i = 0; i < samplesToGenerate; i++) {
-                    Map<String, Double> syntheticFeatures = pattern.generateSyntheticSample();
-                    if (syntheticFeatures != null) {
-                        // Add synthetic sample to training data
-                        addSyntheticTrainingSample(pattern.getName(), syntheticFeatures);
-                        pattern.incrementSyntheticSamples();
-                        syntheticSamplesGenerated.incrementAndGet();
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * Add synthetic sample to ML training data
-     */
-    private void addSyntheticTrainingSample(String patternName, Map<String, Double> features) {
-        try {
-            // Determine if this is normal or suspicious behavior
-            boolean isCheater = patternName.contains("xray") || patternName.contains("suspicious");
-
-            // Create training sample
-            Map<String, Object> trainingSample = new HashMap<>();
-            trainingSample.put("features", new HashMap<>(features));
-            trainingSample.put("label", isCheater ? "cheater" : "normal");
-            trainingSample.put("source", "synthetic_" + patternName);
-            trainingSample.put("timestamp", System.currentTimeMillis());
-
-            // Save to ML data manager
-            MLDataManager.saveSyntheticTrainingSample(trainingSample);
-
-        } catch (Exception e) {
-            MessageManager.log("warning", "Failed to save synthetic training sample: {ERROR}",
-                "ERROR", e.getMessage());
-        }
-    }
-
-    /**
-     * Refine existing patterns based on new data
-     */
-    private void refinePatterns() {
-        for (BehaviorPattern pattern : learnedPatterns.values()) {
-            pattern.refinePattern();
-        }
-    }
-
-    /**
-     * Add unlabeled sample for learning
-     */
-    public void addUnlabeledSample(UUID playerId, Map<String, Double> features, double confidence) {
-        if (unlabeledData.size() < 20000) { // Increased queue limit
-            unlabeledData.add(new UnlabeledSample(playerId, features, confidence));
-        }
-    }
-
-    /**
-     * Get learning statistics
-     */
-    public Map<String, Object> getLearningStats() {
-        Map<String, Object> stats = new HashMap<>();
-        stats.put("patternsLearned", learnedPatterns.size());
-        stats.put("unlabeledSamplesQueued", unlabeledData.size());
-        stats.put("syntheticSamplesGenerated", syntheticSamplesGenerated.get());
-        stats.put("playerProfiles", playerProfiles.size());
-        stats.put("featureDistributions", featureDistributions.size());
-        stats.put("autoGenerateEnabled", autoGenerateEnabled);
-        stats.put("confidenceThreshold", confidenceThreshold);
-
-        return stats;
-    }
-
-    /**
-     * Enable/disable automatic data generation
-     */
-    public void setAutoGenerateEnabled(boolean enabled) {
-        this.autoGenerateEnabled = enabled;
-        MessageManager.log("info", "Auto-training " + (enabled ? "enabled" : "disabled"));
-    }
-
-    /**
-     * Set confidence threshold for pattern matching
-     */
-    public void setConfidenceThreshold(double threshold) {
-        this.confidenceThreshold = Math.max(0.1, Math.min(1.0, threshold));
-    }
-
-    // ===== INNER CLASSES =====
-
-    /**
-     * Represents a behavior pattern - Thread-safe implementation
-     */
-    private static class BehaviorPattern {
-        private final String name;
-        private final List<Map<String, Double>> samples = new ArrayList<>();
-        private final Map<String, Double> featureSums = new HashMap<>();
-        private final Map<String, Double> featureMeans = new HashMap<>();
-        private final Map<String, Double> featureVariances = new HashMap<>();
-        private int syntheticSamplesGenerated = 0;
-
-        public BehaviorPattern(String name) {
-            this.name = name;
-        }
-
-        public synchronized void addSample(Map<String, Double> features, double confidence) {
-            samples.add(new HashMap<>(features));
-
-            // Update running statistics
-            for (Map.Entry<String, Double> entry : features.entrySet()) {
-                String feature = entry.getKey();
-                double value = entry.getValue();
-
-                featureSums.put(feature, featureSums.getOrDefault(feature, 0.0) + value);
-            }
-            
-            // Limit stored samples to prevent memory leaks
-            if (samples.size() > 2000) {
-                Map<String, Double> removed = samples.remove(0);
-                for (Map.Entry<String, Double> entry : removed.entrySet()) {
-                    String feature = entry.getKey();
-                    double value = entry.getValue();
-                    featureSums.put(feature, Math.max(0, featureSums.getOrDefault(feature, 0.0) - value));
-                }
-            }
-        }
-
-        public synchronized double calculateMatchScore(Map<String, Double> features) {
-            if (samples.isEmpty() || featureMeans.isEmpty()) {
-                // Initial update if empty but has samples
-                if (!samples.isEmpty()) updateStatistics();
-                else return 0.0;
+      public synchronized double calculateMatchScore(Map<String, Double> features) {
+         if (this.samples.isEmpty() || this.featureMeans.isEmpty()) {
+            if (this.samples.isEmpty()) {
+               return 0.0;
             }
 
-            double totalScore = 0.0;
-            int featureMatches = 0;
+            this.updateStatistics();
+         }
 
-            for (Map.Entry<String, Double> entry : features.entrySet()) {
-                String feature = entry.getKey();
-                double value = entry.getValue();
-                Double mean = featureMeans.get(feature);
+         double totalScore = 0.0;
+         int featureMatches = 0;
 
-                if (mean != null) {
-                    Double variance = featureVariances.get(feature);
-                    double stdDev = variance != null ? Math.sqrt(variance) : 1.0;
-
-                    // Calculate z-score
-                    double zScore = Math.abs(value - mean) / Math.max(stdDev, 0.001);
-                    double score = Math.max(0, 1.0 - zScore / 3.0); // Score between 0-1
-
-                    totalScore += score;
-                    featureMatches++;
-                }
+         for (Entry<String, Double> entry : features.entrySet()) {
+            String feature = entry.getKey();
+            double value = entry.getValue();
+            Double mean = this.featureMeans.get(feature);
+            if (mean != null) {
+               Double variance = this.featureVariances.get(feature);
+               double stdDev = variance != null ? Math.sqrt(variance) : 1.0;
+               double zScore = Math.abs(value - mean) / Math.max(stdDev, 0.001);
+               double score = Math.max(0.0, 1.0 - zScore / 3.0);
+               totalScore += score;
+               featureMatches++;
             }
+         }
 
-            return featureMatches > 0 ? totalScore / featureMatches : 0.0;
-        }
+         return featureMatches > 0 ? totalScore / featureMatches : 0.0;
+      }
 
-        public synchronized Map<String, Double> getAverageFeatures() {
-            updateStatistics();
-            return new HashMap<>(featureMeans);
-        }
+      public synchronized Map<String, Double> getAverageFeatures() {
+         this.updateStatistics();
+         return new HashMap<>(this.featureMeans);
+      }
 
-        public synchronized Map<String, Double> generateSyntheticSample() {
-            updateStatistics();
-
-            if (featureMeans.isEmpty()) return null;
-
+      public synchronized Map<String, Double> generateSyntheticSample() {
+         this.updateStatistics();
+         if (this.featureMeans.isEmpty()) {
+            return null;
+         } else {
             Map<String, Double> synthetic = new HashMap<>();
             Random random = new Random();
 
-            for (Map.Entry<String, Double> entry : featureMeans.entrySet()) {
-                String feature = entry.getKey();
-                double mean = entry.getValue();
-                double variance = featureVariances.getOrDefault(feature, 1.0);
-                double stdDev = Math.sqrt(variance);
-
-                // Generate value using normal distribution around mean
-                double syntheticValue = mean + random.nextGaussian() * stdDev * 0.4; // Slightly tighter variance
-
-                // Ensure reasonable bounds
-                syntheticValue = Math.max(0, syntheticValue);
-
-                synthetic.put(feature, syntheticValue);
+            for (Entry<String, Double> entry : this.featureMeans.entrySet()) {
+               String feature = entry.getKey();
+               double mean = entry.getValue();
+               double variance = this.featureVariances.getOrDefault(feature, 1.0);
+               double stdDev = Math.sqrt(variance);
+               double syntheticValue = mean + random.nextGaussian() * stdDev * 0.4;
+               syntheticValue = Math.max(0.0, syntheticValue);
+               synthetic.put(feature, syntheticValue);
             }
 
             return synthetic;
-        }
+         }
+      }
 
-        private void updateStatistics() {
-            int sampleCount = samples.size();
-            if (sampleCount == 0) return;
-
-            // Calculate means
-            for (Map.Entry<String, Double> entry : featureSums.entrySet()) {
-                featureMeans.put(entry.getKey(), entry.getValue() / sampleCount);
+      private void updateStatistics() {
+         int sampleCount = this.samples.size();
+         if (sampleCount != 0) {
+            for (Entry<String, Double> entry : this.featureSums.entrySet()) {
+               this.featureMeans.put(entry.getKey(), entry.getValue() / sampleCount);
             }
 
-            // Calculate variances
-            for (Map.Entry<String, Double> entry : featureMeans.entrySet()) {
-                String feature = entry.getKey();
-                double mean = entry.getValue();
-                double sumSquaredDiffs = 0.0;
+            for (Entry<String, Double> entry : this.featureMeans.entrySet()) {
+               String feature = entry.getKey();
+               double mean = entry.getValue();
+               double sumSquaredDiffs = 0.0;
 
-                for (Map<String, Double> sample : samples) {
-                    Double value = sample.get(feature);
-                    if (value != null) {
-                        double diff = value - mean;
-                        sumSquaredDiffs += diff * diff;
-                    }
-                }
+               for (Map<String, Double> sample : this.samples) {
+                  Double value = sample.get(feature);
+                  if (value != null) {
+                     double diff = value - mean;
+                     sumSquaredDiffs += diff * diff;
+                  }
+               }
 
-                double variance = sampleCount > 1 ? sumSquaredDiffs / (sampleCount - 1) : 0.0;
-                featureVariances.put(feature, Math.max(variance, 0.0001)); // Minimum variance
+               double variance = sampleCount > 1 ? sumSquaredDiffs / (sampleCount - 1) : 0.0;
+               this.featureVariances.put(feature, Math.max(variance, 1.0E-4));
             }
-        }
+         }
+      }
 
-        public synchronized void refinePattern() {
-            updateStatistics();
-        }
+      public synchronized void refinePattern() {
+         this.updateStatistics();
+      }
 
-        public String getName() { return name; }
-        public synchronized int getSampleCount() { return samples.size(); }
-        public synchronized int getSyntheticSamplesGenerated() { return syntheticSamplesGenerated; }
-        public synchronized void incrementSyntheticSamples() { syntheticSamplesGenerated++; }
-    }
+      public String getName() {
+         return this.name;
+      }
 
-    /**
-     * Player behavior profile - Thread-safe
-     */
-    private static class PlayerBehaviorProfile {
-        private final UUID playerId;
-        private final Map<String, Integer> patternCounts = new ConcurrentHashMap<>();
-        private final Map<String, Double> averageFeatures = new ConcurrentHashMap<>();
-        private volatile long lastActivity = System.currentTimeMillis();
+      public synchronized int getSampleCount() {
+         return this.samples.size();
+      }
 
-        public PlayerBehaviorProfile(UUID playerId) {
-            this.playerId = playerId;
-        }
+      public synchronized int getSyntheticSamplesGenerated() {
+         return this.syntheticSamplesGenerated;
+      }
 
-        public synchronized void updatePattern(String pattern, Map<String, Double> features) {
-            patternCounts.put(pattern, patternCounts.getOrDefault(pattern, 0) + 1);
+      public synchronized void incrementSyntheticSamples() {
+         this.syntheticSamplesGenerated++;
+      }
+   }
 
-            // Update average features
-            int totalPatterns = patternCounts.values().stream().mapToInt(Integer::intValue).sum();
-            
-            for (Map.Entry<String, Double> entry : features.entrySet()) {
-                String feature = entry.getKey();
-                double value = entry.getValue();
+   private static class FeatureDistribution {
+      private final String featureName;
+      private double sum = 0.0;
+      private double sumSquares = 0.0;
+      private int count = 0;
 
-                double currentAvg = averageFeatures.getOrDefault(feature, 0.0);
-                averageFeatures.put(feature, (currentAvg * (totalPatterns - 1) + value) / totalPatterns);
-            }
-        }
+      public FeatureDistribution(String featureName) {
+         this.featureName = featureName;
+      }
 
-        public void updateLastActivity() {
-            lastActivity = System.currentTimeMillis();
-        }
+      public synchronized void update(double value, int weight) {
+         if (weight <= 0) {
+            weight = 1;
+         }
 
-        public UUID getPlayerId() { return playerId; }
-        public long getLastActivity() { return lastActivity; }
-    }
+         this.sum += value * weight;
+         this.sumSquares += value * value * weight;
+         this.count += weight;
+      }
 
-    /**
-     * Feature distribution for synthetic data generation - Thread-safe
-     */
-    private static class FeatureDistribution {
-        private final String featureName;
-        private double sum = 0.0;
-        private double sumSquares = 0.0;
-        private int count = 0;
+      public synchronized double getMean() {
+         return this.count > 0 ? this.sum / this.count : 0.0;
+      }
 
-        public FeatureDistribution(String featureName) {
-            this.featureName = featureName;
-        }
+      public synchronized double getVariance() {
+         if (this.count <= 1) {
+            return 1.0;
+         } else {
+            double mean = this.getMean();
+            double variance = this.sumSquares / this.count - mean * mean;
+            return Math.max(1.0E-4, variance);
+         }
+      }
+   }
 
-        public synchronized void update(double value, int weight) {
-            if (weight <= 0) weight = 1;
-            sum += value * weight;
-            sumSquares += value * value * weight;
-            count += weight;
-        }
+   private static class PlayerBehaviorProfile {
+      private final UUID playerId;
+      private final Map<String, Integer> patternCounts = new ConcurrentHashMap<>();
+      private final Map<String, Double> averageFeatures = new ConcurrentHashMap<>();
+      private volatile long lastActivity = System.currentTimeMillis();
 
-        public synchronized double getMean() {
-            return count > 0 ? sum / count : 0.0;
-        }
+      public PlayerBehaviorProfile(UUID playerId) {
+         this.playerId = playerId;
+      }
 
-        public synchronized double getVariance() {
-            if (count <= 1) return 1.0;
-            double mean = getMean();
-            double variance = (sumSquares / count) - (mean * mean);
-            return Math.max(0.0001, variance);
-        }
-    }
+      public synchronized void updatePattern(String pattern, Map<String, Double> features) {
+         this.patternCounts.put(pattern, this.patternCounts.getOrDefault(pattern, 0) + 1);
+         int totalPatterns = this.patternCounts.values().stream().mapToInt(Integer::intValue).sum();
 
-    /**
-     * Unlabeled training sample
-     */
-    private static class UnlabeledSample {
-        public final UUID playerId;
-        public final Map<String, Double> features;
-        public final double confidence;
+         for (Entry<String, Double> entry : features.entrySet()) {
+            String feature = entry.getKey();
+            double value = entry.getValue();
+            double currentAvg = this.averageFeatures.getOrDefault(feature, 0.0);
+            this.averageFeatures.put(feature, (currentAvg * (totalPatterns - 1) + value) / totalPatterns);
+         }
+      }
 
-        public UnlabeledSample(UUID playerId, Map<String, Double> features, double confidence) {
-            this.playerId = playerId;
-            this.features = features;
-            this.confidence = confidence;
-        }
-    }
+      public void updateLastActivity() {
+         this.lastActivity = System.currentTimeMillis();
+      }
+
+      public UUID getPlayerId() {
+         return this.playerId;
+      }
+
+      public long getLastActivity() {
+         return this.lastActivity;
+      }
+   }
+
+   private static class UnlabeledSample {
+      public final UUID playerId;
+      public final Map<String, Double> features;
+      public final double confidence;
+
+      public UnlabeledSample(UUID playerId, Map<String, Double> features, double confidence) {
+         this.playerId = playerId;
+         this.features = features;
+         this.confidence = confidence;
+      }
+   }
 }

@@ -11,662 +11,550 @@ import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import org.bukkit.entity.Player;
-import org.jetbrains.annotations.NotNull;
 import net.denfry.owml.OverWatchML;
 import net.denfry.owml.utils.MessageManager;
 import net.denfry.owml.utils.SchedulerUtils;
+import net.denfry.owml.utils.Schedulers;
+import org.bukkit.entity.Player;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
+import org.jetbrains.annotations.NotNull;
 
-/**
- * Composite punishment engine that combines multiple punishment types
- * for more effective and varied consequences.
- *
- * Features:
- * - Punishment combinations
- * - Dynamic effect stacking
- * - Punishment chains (sequential effects)
- * - Adaptive punishment scaling
- * - Effect conflict resolution
- *
- * @author OverWatch Team
- * @version 1.0.0
- * @since 1.8.2
- */
 public class CompositePunishmentEngine {
+   private static final OverWatchML plugin = OverWatchML.getInstance();
+   private final Map<UUID, CompositePunishmentEngine.CompositePunishment> activeComposites = new ConcurrentHashMap<>();
+   private final Map<String, CompositePunishmentEngine.PunishmentTemplate> templates = new ConcurrentHashMap<>();
+   private final AdaptivePunishmentEngine adaptiveEngine = new AdaptivePunishmentEngine();
 
-    private static final OverWatchML plugin = OverWatchML.getInstance();
+   public CompositePunishmentEngine() {
+      this.initializeTemplates();
+      MessageManager.log("info", "Composite Punishment Engine initialized with {TEMPLATES} templates", "TEMPLATES", String.valueOf(this.templates.size()));
+   }
 
-    // Active composite punishments
-    private final Map<UUID, CompositePunishment> activeComposites = new ConcurrentHashMap<>();
+   private void initializeTemplates() {
+      this.templates
+         .put(
+            "light_combo",
+            new CompositePunishmentEngine.PunishmentTemplate(
+               "Light Combination",
+               Arrays.asList(
+                  new CompositePunishmentEngine.PunishmentComponent(CompositePunishmentEngine.PunishmentType.MESSAGE, 1, 30000L),
+                  new CompositePunishmentEngine.PunishmentComponent(CompositePunishmentEngine.PunishmentType.MINING_DEBUFF, 1, 60000L)
+               ),
+               CompositePunishmentEngine.PunishmentChain.SEQUENTIAL
+            )
+         );
+      this.templates
+         .put(
+            "medium_combo",
+            new CompositePunishmentEngine.PunishmentTemplate(
+               "Medium Combination",
+               Arrays.asList(
+                  new CompositePunishmentEngine.PunishmentComponent(CompositePunishmentEngine.PunishmentType.MINING_DEBUFF, 2, 180000L),
+                  new CompositePunishmentEngine.PunishmentComponent(CompositePunishmentEngine.PunishmentType.INVENTORY_RESTRICTION, 1, 120000L),
+                  new CompositePunishmentEngine.PunishmentComponent(CompositePunishmentEngine.PunishmentType.MESSAGE, 2, 30000L)
+               ),
+               CompositePunishmentEngine.PunishmentChain.PARALLEL
+            )
+         );
+      this.templates
+         .put(
+            "heavy_combo",
+            new CompositePunishmentEngine.PunishmentTemplate(
+               "Heavy Combination",
+               Arrays.asList(
+                  new CompositePunishmentEngine.PunishmentComponent(CompositePunishmentEngine.PunishmentType.MINING_DEBUFF, 3, 300000L),
+                  new CompositePunishmentEngine.PunishmentComponent(CompositePunishmentEngine.PunishmentType.INVENTORY_RESTRICTION, 2, 240000L),
+                  new CompositePunishmentEngine.PunishmentComponent(CompositePunishmentEngine.PunishmentType.MOVEMENT_DEBUFF, 2, 180000L),
+                  new CompositePunishmentEngine.PunishmentComponent(CompositePunishmentEngine.PunishmentType.PARANOIA_EFFECT, 1, 120000L)
+               ),
+               CompositePunishmentEngine.PunishmentChain.CASCADE
+            )
+         );
+      this.templates
+         .put(
+            "escalation",
+            new CompositePunishmentEngine.PunishmentTemplate(
+               "Progressive Escalation",
+               Arrays.asList(
+                  new CompositePunishmentEngine.PunishmentComponent(CompositePunishmentEngine.PunishmentType.MESSAGE, 1, 20000L),
+                  new CompositePunishmentEngine.PunishmentComponent(CompositePunishmentEngine.PunishmentType.MINING_DEBUFF, 1, 60000L),
+                  new CompositePunishmentEngine.PunishmentComponent(CompositePunishmentEngine.PunishmentType.INVENTORY_RESTRICTION, 1, 80000L),
+                  new CompositePunishmentEngine.PunishmentComponent(CompositePunishmentEngine.PunishmentType.MOVEMENT_DEBUFF, 1, 100000L),
+                  new CompositePunishmentEngine.PunishmentComponent(CompositePunishmentEngine.PunishmentType.PARANOIA_EFFECT, 1, 120000L)
+               ),
+               CompositePunishmentEngine.PunishmentChain.CASCADE
+            )
+         );
+      this.templates
+         .put(
+            "random_mix",
+            new CompositePunishmentEngine.PunishmentTemplate(
+               "Random Mix",
+               Arrays.asList(
+                  new CompositePunishmentEngine.PunishmentComponent(CompositePunishmentEngine.PunishmentType.random(), 1, 90000L),
+                  new CompositePunishmentEngine.PunishmentComponent(CompositePunishmentEngine.PunishmentType.random(), 2, 120000L),
+                  new CompositePunishmentEngine.PunishmentComponent(CompositePunishmentEngine.PunishmentType.random(), 1, 60000L)
+               ),
+               CompositePunishmentEngine.PunishmentChain.SEQUENTIAL
+            )
+         );
+   }
 
-    // Punishment templates
-    private final Map<String, PunishmentTemplate> templates = new ConcurrentHashMap<>();
+   public void applyAdaptivePunishment(
+      @NotNull UUID playerId, @NotNull String offenseType, double offenseSeverity, @NotNull Map<String, Object> context, @NotNull String reason
+   ) {
+      Player player = plugin.getServer().getPlayer(playerId);
+      if (player != null && player.isOnline()) {
+         AdaptivePunishmentEngine.PunishmentRecommendation recommendation = this.adaptiveEngine
+            .recommendPunishment(playerId, offenseType, offenseSeverity, context);
+         String templateName = this.mapRecommendationToTemplate(recommendation);
+         this.applyCompositePunishment(playerId, templateName, reason + " (Adaptive: " + recommendation.getReasoning() + ")");
+         Schedulers.globalLater(() -> this.trackPunishmentOutcome(playerId, recommendation), 6000L);
+      }
+   }
 
-    // Adaptive punishment engine
-    private final AdaptivePunishmentEngine adaptiveEngine = new AdaptivePunishmentEngine();
+   private String mapRecommendationToTemplate(AdaptivePunishmentEngine.PunishmentRecommendation recommendation) {
+      String punishmentType = recommendation.punishmentType;
+      double intensity = recommendation.intensity;
+      if (intensity < 0.5) {
+         switch (punishmentType) {
+            case "warning":
+               return "light";
+            case "kick":
+               return "light";
+            case "mining_debuff":
+               return "light";
+            default:
+               return "light";
+         }
+      } else if (intensity < 0.8) {
+         switch (punishmentType) {
+            case "temp_ban_1h":
+               return "medium";
+            case "inventory_lock":
+               return "medium";
+            case "speed_reduction":
+               return "medium";
+            default:
+               return "medium";
+         }
+      } else if (intensity < 1.2) {
+         switch (punishmentType) {
+            case "temp_ban_24h":
+               return "heavy";
+            case "fake_ore_veins":
+               return "heavy";
+            case "paranoia_effects":
+               return "heavy";
+            default:
+               return "heavy";
+         }
+      } else {
+         switch (punishmentType) {
+            case "temp_ban_7d":
+               return "severe";
+            case "perm_ban":
+               return "severe";
+            case "cursed_pickaxe":
+               return "severe";
+            default:
+               return "severe";
+         }
+      }
+   }
 
-    public CompositePunishmentEngine() {
-        initializeTemplates();
+   private void trackPunishmentOutcome(UUID playerId, AdaptivePunishmentEngine.PunishmentRecommendation recommendation) {
+      Player player = plugin.getServer().getPlayer(playerId);
+      if (player != null) {
+         boolean wasEffective = player.isOnline() && !this.hasRecentDetections(playerId);
+         Map<String, Object> outcomeContext = new HashMap<>();
+         outcomeContext.put("player_online", player.isOnline());
+         outcomeContext.put("time_since_punishment", 300);
+         outcomeContext.put("has_recent_detections", this.hasRecentDetections(playerId));
+         this.adaptiveEngine.recordPunishmentOutcome(playerId, recommendation.punishmentType, wasEffective, outcomeContext);
+      }
+   }
 
-        // Cleanup task will be started later to avoid scheduler issues during initialization
+   private boolean hasRecentDetections(UUID playerId) {
+      return false;
+   }
 
-        MessageManager.log("info", "Composite Punishment Engine initialized with {TEMPLATES} templates",
-            "TEMPLATES", String.valueOf(templates.size()));
-    }
-
-    /**
-     * Initialize punishment templates
-     */
-    private void initializeTemplates() {
-        // Light combination: Warning + minor debuff
-        templates.put("light_combo", new PunishmentTemplate(
-            "Light Combination",
-            Arrays.asList(
-                new PunishmentComponent(PunishmentType.MESSAGE, 1, 30000), // 30 seconds
-                new PunishmentComponent(PunishmentType.MINING_DEBUFF, 1, 60000) // 1 minute
-            ),
-            PunishmentChain.SEQUENTIAL
-        ));
-
-        // Medium combination: Multiple debuffs + effects
-        templates.put("medium_combo", new PunishmentTemplate(
-            "Medium Combination",
-            Arrays.asList(
-                new PunishmentComponent(PunishmentType.MINING_DEBUFF, 2, 180000), // 3 minutes
-                new PunishmentComponent(PunishmentType.INVENTORY_RESTRICTION, 1, 120000), // 2 minutes
-                new PunishmentComponent(PunishmentType.MESSAGE, 2, 30000) // 30 seconds
-            ),
-            PunishmentChain.PARALLEL
-        ));
-
-        // Heavy combination: Severe effects
-        templates.put("heavy_combo", new PunishmentTemplate(
-            "Heavy Combination",
-            Arrays.asList(
-                new PunishmentComponent(PunishmentType.MINING_DEBUFF, 3, 300000), // 5 minutes
-                new PunishmentComponent(PunishmentType.INVENTORY_RESTRICTION, 2, 240000), // 4 minutes
-                new PunishmentComponent(PunishmentType.MOVEMENT_DEBUFF, 2, 180000), // 3 minutes
-                new PunishmentComponent(PunishmentType.PARANOIA_EFFECT, 1, 120000) // 2 minutes
-            ),
-            PunishmentChain.CASCADE
-        ));
-
-        // Escalation template: Progressive worsening
-        templates.put("escalation", new PunishmentTemplate(
-            "Progressive Escalation",
-            Arrays.asList(
-                new PunishmentComponent(PunishmentType.MESSAGE, 1, 20000), // 20s
-                new PunishmentComponent(PunishmentType.MINING_DEBUFF, 1, 60000), // +40s
-                new PunishmentComponent(PunishmentType.INVENTORY_RESTRICTION, 1, 80000), // +20s
-                new PunishmentComponent(PunishmentType.MOVEMENT_DEBUFF, 1, 100000), // +20s
-                new PunishmentComponent(PunishmentType.PARANOIA_EFFECT, 1, 120000) // +20s
-            ),
-            PunishmentChain.CASCADE
-        ));
-
-        // Random mix template
-        templates.put("random_mix", new PunishmentTemplate(
-            "Random Mix",
-            Arrays.asList(
-                new PunishmentComponent(PunishmentType.random(), 1, 90000),
-                new PunishmentComponent(PunishmentType.random(), 2, 120000),
-                new PunishmentComponent(PunishmentType.random(), 1, 60000)
-            ),
-            PunishmentChain.SEQUENTIAL
-        ));
-    }
-
-    /**
-     * Apply adaptive punishment based on player behavior and history
-     *
-     * @param playerId        The UUID of the player to punish
-     * @param offenseType     The type of offense committed
-     * @param offenseSeverity The severity of the offense (0.0-1.0)
-     * @param context         Additional context information
-     * @param reason          The reason for the punishment
-     */
-    public void applyAdaptivePunishment(@NotNull UUID playerId, @NotNull String offenseType,
-                                       double offenseSeverity, @NotNull Map<String, Object> context,
-                                       @NotNull String reason) {
-        Player player = plugin.getServer().getPlayer(playerId);
-        if (player == null || !player.isOnline()) return;
-
-        // Get adaptive punishment recommendation
-        AdaptivePunishmentEngine.PunishmentRecommendation recommendation =
-            adaptiveEngine.recommendPunishment(playerId, offenseType, offenseSeverity, context);
-
-        // Convert recommendation to template name
-        String templateName = mapRecommendationToTemplate(recommendation);
-
-        // Apply the recommended punishment
-        applyCompositePunishment(playerId, templateName, reason + " (Adaptive: " + recommendation.getReasoning() + ")");
-
-        // Schedule outcome tracking
-        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-            trackPunishmentOutcome(playerId, recommendation);
-        }, 20 * 60 * 5); // Check after 5 minutes
-    }
-
-    /**
-     * Map adaptive recommendation to punishment template
-     */
-    private String mapRecommendationToTemplate(AdaptivePunishmentEngine.PunishmentRecommendation recommendation) {
-        String punishmentType = recommendation.punishmentType;
-        double intensity = recommendation.intensity;
-
-        // Map punishment types to templates based on intensity
-        if (intensity < 0.5) {
-            switch (punishmentType) {
-                case "warning": return "light";
-                case "kick": return "light";
-                case "mining_debuff": return "light";
-                default: return "light";
-            }
-        } else if (intensity < 0.8) {
-            switch (punishmentType) {
-                case "temp_ban_1h": return "medium";
-                case "inventory_lock": return "medium";
-                case "speed_reduction": return "medium";
-                default: return "medium";
-            }
-        } else if (intensity < 1.2) {
-            switch (punishmentType) {
-                case "temp_ban_24h": return "heavy";
-                case "fake_ore_veins": return "heavy";
-                case "paranoia_effects": return "heavy";
-                default: return "heavy";
-            }
-        } else {
-            switch (punishmentType) {
-                case "temp_ban_7d": return "severe";
-                case "perm_ban": return "severe";
-                case "cursed_pickaxe": return "severe";
-                default: return "severe";
-            }
-        }
-    }
-
-    /**
-     * Track punishment outcome for learning
-     */
-    private void trackPunishmentOutcome(UUID playerId, AdaptivePunishmentEngine.PunishmentRecommendation recommendation) {
-        Player player = plugin.getServer().getPlayer(playerId);
-        if (player == null) return;
-
-        // Simple outcome tracking: check if player is still online and not causing issues
-        boolean wasEffective = player.isOnline() && !hasRecentDetections(playerId);
-
-        Map<String, Object> outcomeContext = new HashMap<>();
-        outcomeContext.put("player_online", player.isOnline());
-        outcomeContext.put("time_since_punishment", 5 * 60); // 5 minutes
-        outcomeContext.put("has_recent_detections", hasRecentDetections(playerId));
-
-        // Record outcome for learning
-        adaptiveEngine.recordPunishmentOutcome(playerId, recommendation.punishmentType,
-            wasEffective, outcomeContext);
-    }
-
-    /**
-     * Check if player has recent detections (simplified)
-     */
-    private boolean hasRecentDetections(UUID playerId) {
-        // This would integrate with the detection system
-        // For now, return false (assume punishment was effective)
-        return false;
-    }
-
-    /**
-     * Apply composite punishment using template
-     */
-    public void applyCompositePunishment(@NotNull UUID playerId, @NotNull String templateName, @NotNull String reason) {
-        Player player = plugin.getServer().getPlayer(playerId);
-        if (player == null || !player.isOnline()) return;
-
-        PunishmentTemplate template = templates.get(templateName);
-        if (template == null) {
+   public void applyCompositePunishment(@NotNull UUID playerId, @NotNull String templateName, @NotNull String reason) {
+      Player player = plugin.getServer().getPlayer(playerId);
+      if (player != null && player.isOnline()) {
+         CompositePunishmentEngine.PunishmentTemplate template = this.templates.get(templateName);
+         if (template == null) {
             MessageManager.log("error", "Unknown punishment template: {TEMPLATE}", "TEMPLATE", templateName);
-            return;
-        }
-
-        // Check for existing composite punishment
-        CompositePunishment existing = activeComposites.get(playerId);
-        if (existing != null && !existing.isExpired()) {
-            // Merge with existing punishment
-            mergePunishments(player, existing, template, reason);
-            return;
-        }
-
-        // Create new composite punishment
-        CompositePunishment composite = new CompositePunishment(
-            playerId, template, reason, System.currentTimeMillis()
-        );
-
-        activeComposites.put(playerId, composite);
-
-        // Apply punishment based on chain type
-        applyPunishmentChain(player, composite);
-
-        // Notify player and staff
-        notifyCompositePunishment(player, template, reason);
-
-        MessageManager.log("info", "Applied composite punishment '{TEMPLATE}' to {PLAYER}: {REASON}",
-            "TEMPLATE", templateName, "PLAYER", player.getName(), "REASON", reason);
-    }
-
-    /**
-     * Apply punishment based on chain type
-     */
-    private void applyPunishmentChain(Player player, CompositePunishment composite) {
-        PunishmentTemplate template = composite.template;
-
-        switch (template.chainType) {
-            case SEQUENTIAL -> applySequentialChain(player, composite);
-            case PARALLEL -> applyParallelChain(player, composite);
-            case CASCADE -> applyCascadeChain(player, composite);
-            case RANDOM -> applyRandomChain(player, composite);
-        }
-    }
-
-    /**
-     * Apply punishments sequentially (one after another)
-     */
-    private void applySequentialChain(Player player, CompositePunishment composite) {
-        PunishmentTemplate template = composite.template;
-        long currentDelay = 0;
-
-        for (PunishmentComponent component : template.components) {
-            SchedulerUtils.runTaskLater(plugin, () -> {
-                applyPunishmentComponent(player, component);
-            }, currentDelay / 50); // Convert to ticks
-
-            currentDelay += component.duration;
-        }
-
-        composite.totalDuration = currentDelay;
-    }
-
-    /**
-     * Apply punishments in parallel (all at once)
-     */
-    private void applyParallelChain(Player player, CompositePunishment composite) {
-        PunishmentTemplate template = composite.template;
-        long maxDuration = 0;
-
-        for (PunishmentComponent component : template.components) {
-            applyPunishmentComponent(player, component);
-            maxDuration = Math.max(maxDuration, component.duration);
-        }
-
-        composite.totalDuration = maxDuration;
-    }
-
-    /**
-     * Apply punishments in cascade (each adds to previous)
-     */
-    private void applyCascadeChain(Player player, CompositePunishment composite) {
-        PunishmentTemplate template = composite.template;
-        long cumulativeDelay = 0;
-        long totalDuration = 0;
-
-        for (PunishmentComponent component : template.components) {
-            SchedulerUtils.runTaskLater(plugin, () -> {
-                applyPunishmentComponent(player, component);
-            }, cumulativeDelay / 50);
-
-            cumulativeDelay += component.delay;
-            totalDuration += component.duration;
-        }
-
-        composite.totalDuration = totalDuration;
-    }
-
-    /**
-     * Apply punishments in random order with random delays
-     */
-    private void applyRandomChain(Player player, CompositePunishment composite) {
-        PunishmentTemplate template = composite.template;
-        List<PunishmentComponent> shuffled = new ArrayList<>(template.components);
-        Collections.shuffle(shuffled);
-
-        long maxDuration = 0;
-        Random random = new Random();
-
-        for (PunishmentComponent component : shuffled) {
-            long delay = random.nextInt(10000); // Random delay up to 10 seconds
-            SchedulerUtils.runTaskLater(plugin, () -> {
-                applyPunishmentComponent(player, component);
-            }, delay / 50);
-
-            maxDuration = Math.max(maxDuration, delay + component.duration);
-        }
-
-        composite.totalDuration = maxDuration;
-    }
-
-    /**
-     * Apply individual punishment component
-     */
-    private void applyPunishmentComponent(Player player, PunishmentComponent component) {
-        switch (component.type) {
-            case MESSAGE -> applyMessageEffect(player, component);
-            case MINING_DEBUFF -> applyMiningDebuff(player, component);
-            case INVENTORY_RESTRICTION -> applyInventoryRestriction(player, component);
-            case MOVEMENT_DEBUFF -> applyMovementDebuff(player, component);
-            case PARANOIA_EFFECT -> applyParanoiaEffect(player, component);
-            case VISUAL_EFFECT -> applyVisualEffect(player, component);
-            case SOUND_EFFECT -> applySoundEffect(player, component);
-        }
-    }
-
-    /**
-     * Merge new punishment with existing one
-     */
-    private void mergePunishments(Player player, CompositePunishment existing,
-                                PunishmentTemplate newTemplate, String reason) {
-        // Create merged template
-        List<PunishmentComponent> mergedComponents = new ArrayList<>(existing.template.components);
-
-        // Add new components (avoid duplicates)
-        for (PunishmentComponent newComponent : newTemplate.components) {
-            boolean exists = mergedComponents.stream()
-                .anyMatch(component -> component.type == newComponent.type);
-
-            if (!exists) {
-                mergedComponents.add(newComponent);
+         } else {
+            CompositePunishmentEngine.CompositePunishment existing = this.activeComposites.get(playerId);
+            if (existing != null && !existing.isExpired()) {
+               this.mergePunishments(player, existing, template, reason);
+            } else {
+               CompositePunishmentEngine.CompositePunishment composite = new CompositePunishmentEngine.CompositePunishment(
+                  playerId, template, reason, System.currentTimeMillis()
+               );
+               this.activeComposites.put(playerId, composite);
+               this.applyPunishmentChain(player, composite);
+               this.notifyCompositePunishment(player, template, reason);
+               MessageManager.log(
+                  "info",
+                  "Applied composite punishment '{TEMPLATE}' to {PLAYER}: {REASON}",
+                  "TEMPLATE",
+                  templateName,
+                  "PLAYER",
+                  player.getName(),
+                  "REASON",
+                  reason
+               );
             }
-        }
+         }
+      }
+   }
 
-        PunishmentTemplate mergedTemplate = new PunishmentTemplate(
-            "Merged: " + existing.template.name + " + " + newTemplate.name,
-            mergedComponents,
-            PunishmentChain.PARALLEL // Merged punishments run in parallel
-        );
+   private void applyPunishmentChain(Player player, CompositePunishmentEngine.CompositePunishment composite) {
+      CompositePunishmentEngine.PunishmentTemplate template = composite.template;
+      switch (template.chainType) {
+         case SEQUENTIAL:
+            this.applySequentialChain(player, composite);
+            break;
+         case PARALLEL:
+            this.applyParallelChain(player, composite);
+            break;
+         case CASCADE:
+            this.applyCascadeChain(player, composite);
+            break;
+         case RANDOM:
+            this.applyRandomChain(player, composite);
+      }
+   }
 
-        // Replace existing punishment
-        CompositePunishment merged = new CompositePunishment(
-            player.getUniqueId(), mergedTemplate, reason + " (merged)", System.currentTimeMillis()
-        );
+   private void applySequentialChain(Player player, CompositePunishmentEngine.CompositePunishment composite) {
+      CompositePunishmentEngine.PunishmentTemplate template = composite.template;
+      long currentDelay = 0L;
 
-        activeComposites.put(player.getUniqueId(), merged);
-        applyPunishmentChain(player, merged);
+      for (CompositePunishmentEngine.PunishmentComponent component : template.components) {
+         Schedulers.entityLater(player, () -> this.applyPunishmentComponent(player, component), currentDelay / 50L);
+         currentDelay += component.duration;
+      }
 
-        MessageManager.send(player, "punishment.applied",
-            "PUNISHMENT", "Merged punishment effects",
-            "PLAYER", player.getName(),
-            "LEVEL", "Enhanced");
-    }
+      composite.totalDuration = currentDelay;
+   }
 
-    /**
-     * Notify about composite punishment
-     */
-    private void notifyCompositePunishment(Player player, PunishmentTemplate template, String reason) {
-        MessageManager.send(player, "punishment.applied",
-            "PUNISHMENT", template.name,
-            "PLAYER", player.getName(),
-            "LEVEL", "Composite");
+   private void applyParallelChain(Player player, CompositePunishmentEngine.CompositePunishment composite) {
+      CompositePunishmentEngine.PunishmentTemplate template = composite.template;
+      long maxDuration = 0L;
 
-        MessageManager.broadcastToPermission("owml.staff", "punishment.applied",
-            "PUNISHMENT", template.name + " (" + template.components.size() + " effects)",
-            "PLAYER", player.getName(),
-            "LEVEL", "Composite");
-    }
+      for (CompositePunishmentEngine.PunishmentComponent component : template.components) {
+         this.applyPunishmentComponent(player, component);
+         maxDuration = Math.max(maxDuration, component.duration);
+      }
 
-    /**
-     * Start cleanup task for expired punishments
-     */
-    public void startCompositeCleanupTask() {
-        SchedulerUtils.runTaskTimer(plugin, () -> {
-            long now = System.currentTimeMillis();
+      composite.totalDuration = maxDuration;
+   }
 
-            activeComposites.entrySet().removeIf(entry -> {
-                CompositePunishment punishment = entry.getValue();
-                if (punishment.isExpired(now)) {
-                    // Remove effects from player
-                    Player player = plugin.getServer().getPlayer(entry.getKey());
-                    if (player != null) {
-                        removeCompositeEffects(player, punishment);
-                    }
-                    return true;
-                }
-                return false;
-            });
-        }, 1200L, 1200L); // Every minute
-    }
+   private void applyCascadeChain(Player player, CompositePunishmentEngine.CompositePunishment composite) {
+      CompositePunishmentEngine.PunishmentTemplate template = composite.template;
+      long cumulativeDelay = 0L;
+      long totalDuration = 0L;
 
-    /**
-     * Remove composite punishment effects
-     */
-    private void removeCompositeEffects(Player player, CompositePunishment punishment) {
-        // Remove all effects from the punishment
-        for (PunishmentComponent component : punishment.template.components) {
-            removePunishmentComponent(player, component);
-        }
+      for (CompositePunishmentEngine.PunishmentComponent component : template.components) {
+         Schedulers.entityLater(player, () -> this.applyPunishmentComponent(player, component), cumulativeDelay / 50L);
+         cumulativeDelay += component.delay;
+         totalDuration += component.duration;
+      }
 
-        MessageManager.send(player, "punishment.removed", "PLAYER", player.getName());
-    }
+      composite.totalDuration = totalDuration;
+   }
 
-    // ===== EFFECT IMPLEMENTATIONS =====
+   private void applyRandomChain(Player player, CompositePunishmentEngine.CompositePunishment composite) {
+      CompositePunishmentEngine.PunishmentTemplate template = composite.template;
+      List<CompositePunishmentEngine.PunishmentComponent> shuffled = new ArrayList<>(template.components);
+      Collections.shuffle(shuffled);
+      long maxDuration = 0L;
+      Random random = new Random();
 
-    private void applyMessageEffect(Player player, PunishmentComponent component) {
-        String message = "Р’В§eРІС™В  Punishment Effect: " + component.type.name() + " (Level " + component.intensity + ")";
-        player.sendMessage(message);
-    }
+      for (CompositePunishmentEngine.PunishmentComponent component : shuffled) {
+         long delay = random.nextInt(10000);
+         Schedulers.entityLater(player, () -> this.applyPunishmentComponent(player, component), delay / 50L);
+         maxDuration = Math.max(maxDuration, delay + component.duration);
+      }
 
-    private void applyMiningDebuff(Player player, PunishmentComponent component) {
-        // Integration with existing mining debuff systems
-        MessageManager.send(player, "punishment.applied",
-            "PUNISHMENT", "Mining Debuff (Level " + component.intensity + ")",
-            "PLAYER", player.getName(),
-            "LEVEL", "Composite");
-    }
+      composite.totalDuration = maxDuration;
+   }
 
-    private void applyInventoryRestriction(Player player, PunishmentComponent component) {
-        // Integration with existing inventory systems
-        MessageManager.send(player, "punishment.applied",
-            "PUNISHMENT", "Inventory Restriction (Level " + component.intensity + ")",
-            "PLAYER", player.getName(),
-            "LEVEL", "Composite");
-    }
+   private void applyPunishmentComponent(Player player, CompositePunishmentEngine.PunishmentComponent component) {
+      if (!Schedulers.isOwned(player)) {
+         Schedulers.entity(player, () -> this.applyPunishmentComponent(player, component));
+      } else {
+         switch (component.type) {
+            case MESSAGE:
+               this.applyMessageEffect(player, component);
+               break;
+            case MINING_DEBUFF:
+               this.applyMiningDebuff(player, component);
+               break;
+            case INVENTORY_RESTRICTION:
+               this.applyInventoryRestriction(player, component);
+               break;
+            case MOVEMENT_DEBUFF:
+               this.applyMovementDebuff(player, component);
+               break;
+            case PARANOIA_EFFECT:
+               this.applyParanoiaEffect(player, component);
+               break;
+            case VISUAL_EFFECT:
+               this.applyVisualEffect(player, component);
+               break;
+            case SOUND_EFFECT:
+               this.applySoundEffect(player, component);
+         }
+      }
+   }
 
-    private void applyMovementDebuff(Player player, PunishmentComponent component) {
-        player.addPotionEffect(new org.bukkit.potion.PotionEffect(
-            org.bukkit.potion.PotionEffectType.SLOWNESS, (int)(component.duration / 50), component.intensity - 1));
-    }
+   private void mergePunishments(
+      Player player, CompositePunishmentEngine.CompositePunishment existing, CompositePunishmentEngine.PunishmentTemplate newTemplate, String reason
+   ) {
+      List<CompositePunishmentEngine.PunishmentComponent> mergedComponents = new ArrayList<>(existing.template.components);
 
-    private void applyParanoiaEffect(Player player, PunishmentComponent component) {
-        // Integration with ParanoiaHandler
-        MessageManager.send(player, "punishment.applied",
-            "PUNISHMENT", "Paranoia Effect (Level " + component.intensity + ")",
-            "PLAYER", player.getName(),
-            "LEVEL", "Composite");
-    }
+      for (CompositePunishmentEngine.PunishmentComponent newComponent : newTemplate.components) {
+         boolean exists = mergedComponents.stream().anyMatch(component -> component.type == newComponent.type);
+         if (!exists) {
+            mergedComponents.add(newComponent);
+         }
+      }
 
-    private void applyVisualEffect(Player player, PunishmentComponent component) {
-        // Apply visual distortion effects
-        player.sendMessage("Р’В§cСЂСџвЂРѓ Visual effects applied!");
-    }
+      CompositePunishmentEngine.PunishmentTemplate mergedTemplate = new CompositePunishmentEngine.PunishmentTemplate(
+         "Merged: " + existing.template.name + " + " + newTemplate.name, mergedComponents, CompositePunishmentEngine.PunishmentChain.PARALLEL
+      );
+      CompositePunishmentEngine.CompositePunishment merged = new CompositePunishmentEngine.CompositePunishment(
+         player.getUniqueId(), mergedTemplate, reason + " (merged)", System.currentTimeMillis()
+      );
+      this.activeComposites.put(player.getUniqueId(), merged);
+      this.applyPunishmentChain(player, merged);
+      MessageManager.send(player, "punishment.applied", "PUNISHMENT", "Merged punishment effects", "PLAYER", player.getName(), "LEVEL", "Enhanced");
+   }
 
-    private void applySoundEffect(Player player, PunishmentComponent component) {
-        // Play disturbing sounds
-        player.sendMessage("Р’В§4СЂСџвЂќР‰ Audio effects applied!");
-    }
+   private void notifyCompositePunishment(Player player, CompositePunishmentEngine.PunishmentTemplate template, String reason) {
+      MessageManager.send(player, "punishment.applied", "PUNISHMENT", template.name, "PLAYER", player.getName(), "LEVEL", "Composite");
+      MessageManager.broadcastToPermission(
+         "owml.staff",
+         "punishment.applied",
+         "PUNISHMENT",
+         template.name + " (" + template.components.size() + " effects)",
+         "PLAYER",
+         player.getName(),
+         "LEVEL",
+         "Composite"
+      );
+   }
 
-    private void removePunishmentComponent(Player player, PunishmentComponent component) {
-        switch (component.type) {
-            case MOVEMENT_DEBUFF -> {
-                player.removePotionEffect(org.bukkit.potion.PotionEffectType.SLOWNESS);
+   public void startCompositeCleanupTask() {
+      SchedulerUtils.runTaskTimer(plugin, () -> {
+         long now = System.currentTimeMillis();
+         this.activeComposites.entrySet().removeIf(entry -> {
+            CompositePunishmentEngine.CompositePunishment punishment = entry.getValue();
+            if (punishment.isExpired(now)) {
+               Player player = plugin.getServer().getPlayer(entry.getKey());
+               if (player != null) {
+                  Schedulers.entity(player, () -> this.removeCompositeEffects(player, punishment));
+               }
+
+               return true;
+            } else {
+               return false;
             }
-            case MESSAGE, MINING_DEBUFF, INVENTORY_RESTRICTION, PARANOIA_EFFECT, VISUAL_EFFECT, SOUND_EFFECT -> {
-                // These effects don't need explicit removal or are handled elsewhere
-            }
-        }
-    }
+         });
+      }, 1200L, 1200L);
+   }
 
-    // ===== PUBLIC API =====
+   private void removeCompositeEffects(Player player, CompositePunishmentEngine.CompositePunishment punishment) {
+      for (CompositePunishmentEngine.PunishmentComponent component : punishment.template.components) {
+         this.removePunishmentComponent(player, component);
+      }
 
-    /**
-     * Check if player has active composite punishment
-     */
-    public boolean hasActiveCompositePunishment(UUID playerId) {
-        CompositePunishment punishment = activeComposites.get(playerId);
-        return punishment != null && !punishment.isExpired();
-    }
+      MessageManager.send(player, "punishment.removed", "PLAYER", player.getName());
+   }
 
-    /**
-     * Get active composite punishment for player
-     */
-    public CompositePunishment getActiveCompositePunishment(UUID playerId) {
-        return activeComposites.get(playerId);
-    }
+   private void applyMessageEffect(Player player, CompositePunishmentEngine.PunishmentComponent component) {
+      String message = "§e⚠ Punishment Effect: " + component.type.name() + " (Level " + component.intensity + ")";
+      player.sendMessage(message);
+   }
 
-    /**
-     * Remove composite punishment from player
-     */
-    public void removeCompositePunishment(UUID playerId) {
-        CompositePunishment punishment = activeComposites.remove(playerId);
-        if (punishment != null) {
-            Player player = plugin.getServer().getPlayer(playerId);
-            if (player != null) {
-                removeCompositeEffects(player, punishment);
-            }
-        }
-    }
+   private void applyMiningDebuff(Player player, CompositePunishmentEngine.PunishmentComponent component) {
+      MessageManager.send(
+         player, "punishment.applied", "PUNISHMENT", "Mining Debuff (Level " + component.intensity + ")", "PLAYER", player.getName(), "LEVEL", "Composite"
+      );
+   }
 
-    /**
-     * Get available punishment templates
-     */
-    public Set<String> getAvailableTemplates() {
-        return new HashSet<>(templates.keySet());
-    }
+   private void applyInventoryRestriction(Player player, CompositePunishmentEngine.PunishmentComponent component) {
+      MessageManager.send(
+         player,
+         "punishment.applied",
+         "PUNISHMENT",
+         "Inventory Restriction (Level " + component.intensity + ")",
+         "PLAYER",
+         player.getName(),
+         "LEVEL",
+         "Composite"
+      );
+   }
 
-    /**
-     * Get composite punishment statistics
-     */
-    public CompositeStats getStats() {
-        int activeCount = (int) activeComposites.values().stream()
-            .filter(p -> !p.isExpired())
-            .count();
+   private void applyMovementDebuff(Player player, CompositePunishmentEngine.PunishmentComponent component) {
+      player.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, (int)(component.duration / 50L), component.intensity - 1));
+   }
 
-        return new CompositeStats(
-            activeComposites.size(),
-            activeCount,
-            templates.size(),
-            System.currentTimeMillis()
-        );
-    }
+   private void applyParanoiaEffect(Player player, CompositePunishmentEngine.PunishmentComponent component) {
+      MessageManager.send(
+         player, "punishment.applied", "PUNISHMENT", "Paranoia Effect (Level " + component.intensity + ")", "PLAYER", player.getName(), "LEVEL", "Composite"
+      );
+   }
 
-    // ===== DATA CLASSES =====
+   private void applyVisualEffect(Player player, CompositePunishmentEngine.PunishmentComponent component) {
+      player.sendMessage("§c\ud83d\udc41 Visual effects applied!");
+   }
 
-    /**
-     * Active composite punishment
-     */
-    public static class CompositePunishment {
-        public final UUID playerId;
-        public final PunishmentTemplate template;
-        public final String reason;
-        public final long startTime;
-        public long totalDuration;
+   private void applySoundEffect(Player player, CompositePunishmentEngine.PunishmentComponent component) {
+      player.sendMessage("§4\ud83d\udd0a Audio effects applied!");
+   }
 
-        public CompositePunishment(UUID playerId, PunishmentTemplate template, String reason, long startTime) {
-            this.playerId = playerId;
-            this.template = template;
-            this.reason = reason;
-            this.startTime = startTime;
-        }
+   private void removePunishmentComponent(Player player, CompositePunishmentEngine.PunishmentComponent component) {
+      switch (component.type) {
+         case MOVEMENT_DEBUFF:
+            player.removePotionEffect(PotionEffectType.SLOWNESS);
+         case MESSAGE:
+         case MINING_DEBUFF:
+         case INVENTORY_RESTRICTION:
+         case PARANOIA_EFFECT:
+         case VISUAL_EFFECT:
+         case SOUND_EFFECT:
+      }
+   }
 
-        public boolean isExpired() {
-            return isExpired(System.currentTimeMillis());
-        }
+   public boolean hasActiveCompositePunishment(UUID playerId) {
+      CompositePunishmentEngine.CompositePunishment punishment = this.activeComposites.get(playerId);
+      return punishment != null && !punishment.isExpired();
+   }
 
-        public boolean isExpired(long currentTime) {
-            return (currentTime - startTime) >= totalDuration;
-        }
+   public CompositePunishmentEngine.CompositePunishment getActiveCompositePunishment(UUID playerId) {
+      return this.activeComposites.get(playerId);
+   }
 
-        public long getRemainingTime() {
-            long elapsed = System.currentTimeMillis() - startTime;
-            return Math.max(0, totalDuration - elapsed);
-        }
-    }
+   public void removeCompositePunishment(UUID playerId) {
+      CompositePunishmentEngine.CompositePunishment punishment = this.activeComposites.remove(playerId);
+      if (punishment != null) {
+         Player player = plugin.getServer().getPlayer(playerId);
+         if (player != null) {
+            this.removeCompositeEffects(player, punishment);
+         }
+      }
+   }
 
-    /**
-     * Punishment template definition
-     */
-    public static class PunishmentTemplate {
-        public final String name;
-        public final List<PunishmentComponent> components;
-        public final PunishmentChain chainType;
+   public Set<String> getAvailableTemplates() {
+      return new HashSet<>(this.templates.keySet());
+   }
 
-        public PunishmentTemplate(String name, List<PunishmentComponent> components, PunishmentChain chainType) {
-            this.name = name;
-            this.components = components;
-            this.chainType = chainType;
-        }
-    }
+   public CompositePunishmentEngine.CompositeStats getStats() {
+      int activeCount = (int)this.activeComposites.values().stream().filter(p -> !p.isExpired()).count();
+      return new CompositePunishmentEngine.CompositeStats(this.activeComposites.size(), activeCount, this.templates.size(), System.currentTimeMillis());
+   }
 
-    /**
-     * Individual punishment component
-     */
-    public static class PunishmentComponent {
-        public final PunishmentType type;
-        public final int intensity;
-        public final long duration;
-        public final long delay; // For cascade chains
+   public Map<String, Object> getAdaptiveStats() {
+      return this.adaptiveEngine.getAdaptiveStats();
+   }
 
-        public PunishmentComponent(PunishmentType type, int intensity, long duration) {
-            this(type, intensity, duration, 0);
-        }
+   public static class CompositePunishment {
+      public final UUID playerId;
+      public final CompositePunishmentEngine.PunishmentTemplate template;
+      public final String reason;
+      public final long startTime;
+      public long totalDuration;
 
-        public PunishmentComponent(PunishmentType type, int intensity, long duration, long delay) {
-            this.type = type;
-            this.intensity = intensity;
-            this.duration = duration;
-            this.delay = delay;
-        }
-    }
+      public CompositePunishment(UUID playerId, CompositePunishmentEngine.PunishmentTemplate template, String reason, long startTime) {
+         this.playerId = playerId;
+         this.template = template;
+         this.reason = reason;
+         this.startTime = startTime;
+      }
 
-    /**
-     * Punishment types
-     */
-    public enum PunishmentType {
-        MESSAGE, MINING_DEBUFF, INVENTORY_RESTRICTION, MOVEMENT_DEBUFF,
-        PARANOIA_EFFECT, VISUAL_EFFECT, SOUND_EFFECT;
+      public boolean isExpired() {
+         return this.isExpired(System.currentTimeMillis());
+      }
 
-        public static PunishmentType random() {
-            return values()[new Random().nextInt(values().length)];
-        }
-    }
+      public boolean isExpired(long currentTime) {
+         return currentTime - this.startTime >= this.totalDuration;
+      }
 
-    /**
-     * Punishment chain types
-     */
-    public enum PunishmentChain {
-        SEQUENTIAL, // One after another
-        PARALLEL,   // All at once
-        CASCADE,    // Progressive addition
-        RANDOM      // Random order and timing
-    }
+      public long getRemainingTime() {
+         long elapsed = System.currentTimeMillis() - this.startTime;
+         return Math.max(0L, this.totalDuration - elapsed);
+      }
+   }
 
-    /**
-     * Composite punishment statistics
-     */
-    public static class CompositeStats {
-        public final int totalPunishments;
-        public final int activePunishments;
-        public final int availableTemplates;
-        public final long lastUpdate;
+   public static class CompositeStats {
+      public final int totalPunishments;
+      public final int activePunishments;
+      public final int availableTemplates;
+      public final long lastUpdate;
 
-        public CompositeStats(int totalPunishments, int activePunishments, int availableTemplates, long lastUpdate) {
-            this.totalPunishments = totalPunishments;
-            this.activePunishments = activePunishments;
-            this.availableTemplates = availableTemplates;
-            this.lastUpdate = lastUpdate;
-        }
-    }
+      public CompositeStats(int totalPunishments, int activePunishments, int availableTemplates, long lastUpdate) {
+         this.totalPunishments = totalPunishments;
+         this.activePunishments = activePunishments;
+         this.availableTemplates = availableTemplates;
+         this.lastUpdate = lastUpdate;
+      }
+   }
 
-    /**
-     * Get adaptive punishment engine statistics
-     */
-    public Map<String, Object> getAdaptiveStats() {
-        return adaptiveEngine.getAdaptiveStats();
-    }
+   public static enum PunishmentChain {
+      SEQUENTIAL,
+      PARALLEL,
+      CASCADE,
+      RANDOM;
+   }
+
+   public static class PunishmentComponent {
+      public final CompositePunishmentEngine.PunishmentType type;
+      public final int intensity;
+      public final long duration;
+      public final long delay;
+
+      public PunishmentComponent(CompositePunishmentEngine.PunishmentType type, int intensity, long duration) {
+         this(type, intensity, duration, 0L);
+      }
+
+      public PunishmentComponent(CompositePunishmentEngine.PunishmentType type, int intensity, long duration, long delay) {
+         this.type = type;
+         this.intensity = intensity;
+         this.duration = duration;
+         this.delay = delay;
+      }
+   }
+
+   public static class PunishmentTemplate {
+      public final String name;
+      public final List<CompositePunishmentEngine.PunishmentComponent> components;
+      public final CompositePunishmentEngine.PunishmentChain chainType;
+
+      public PunishmentTemplate(
+         String name, List<CompositePunishmentEngine.PunishmentComponent> components, CompositePunishmentEngine.PunishmentChain chainType
+      ) {
+         this.name = name;
+         this.components = components;
+         this.chainType = chainType;
+      }
+   }
+
+   public static enum PunishmentType {
+      MESSAGE,
+      MINING_DEBUFF,
+      INVENTORY_RESTRICTION,
+      MOVEMENT_DEBUFF,
+      PARANOIA_EFFECT,
+      VISUAL_EFFECT,
+      SOUND_EFFECT;
+
+      public static CompositePunishmentEngine.PunishmentType random() {
+         return values()[new Random().nextInt(values().length)];
+      }
+   }
 }

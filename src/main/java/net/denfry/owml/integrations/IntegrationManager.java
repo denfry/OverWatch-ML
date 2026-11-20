@@ -1,180 +1,110 @@
 package net.denfry.owml.integrations;
 
+import java.util.ArrayList;
+import java.util.List;
 import net.denfry.owml.OverWatchML;
 import net.denfry.owml.integrations.discord.DiscordBot;
 import net.denfry.owml.utils.MessageManager;
 import org.bukkit.entity.Player;
 
-import java.util.ArrayList;
-import java.util.List;
-
-/**
- * Manager for all external integrations (Discord, anti-cheat plugins, etc.)
- *
- * @author OverWatch Team
- * @version 1.0.0
- * @since 1.8.3
- */
 public class IntegrationManager {
+   private static final OverWatchML plugin = OverWatchML.getInstance();
+   private DiscordBot discordBot;
 
-    private static final OverWatchML plugin = OverWatchML.getInstance();
+   public IntegrationManager() {
+      this.initializeIntegrations();
+   }
 
-    // Discord integration
-    private DiscordBot discordBot;
+   private void initializeIntegrations() {
+      this.initializeDiscordBot();
+      MessageManager.log("info", "Integration manager initialized with {COUNT} integrations", "COUNT", String.valueOf(this.getActiveIntegrationsCount()));
+   }
 
+   private void initializeDiscordBot() {
+      try {
+         String botToken = plugin.getConfig().getString("integrations.discord.bot-token");
+         String notificationChannel = plugin.getConfig().getString("integrations.discord.notification-channel");
+         String commandChannel = plugin.getConfig().getString("integrations.discord.command-channel");
+         boolean enabled = plugin.getConfig().getBoolean("integrations.discord.enabled", false);
+         if (enabled && botToken != null && !botToken.isEmpty() && !botToken.equals("YOUR_BOT_TOKEN_HERE")) {
+            this.discordBot = new DiscordBot();
+            this.discordBot.initialize(botToken, notificationChannel, commandChannel).whenComplete((result, throwable) -> {
+               if (throwable != null) {
+                  MessageManager.log("error", "Failed to initialize Discord bot: {ERROR}", "ERROR", throwable.getMessage());
+               }
+            });
+         }
+      } catch (Exception var5) {
+         MessageManager.log("error", "Failed to initialize Discord integration: {ERROR}", "ERROR", var5.getMessage());
+      }
+   }
 
-    public IntegrationManager() {
-        initializeIntegrations();
-    }
+   public void sendAlert(String playerName, String alertType, String details, int suspicionLevel) {
+      if (this.discordBot != null && this.discordBot.isEnabled()) {
+         this.discordBot.sendAlert(playerName, alertType, details, suspicionLevel);
+      }
+   }
 
-    /**
-     * Initialize all integrations
-     */
-    private void initializeIntegrations() {
-        // Initialize Discord bot
-        initializeDiscordBot();
+   public void sendPerformanceReport(double tps, int onlinePlayers, int suspiciousPlayers) {
+      if (this.discordBot != null && this.discordBot.isEnabled()) {
+         this.discordBot.sendPerformanceReport(tps, onlinePlayers, suspiciousPlayers);
+      }
+   }
 
-        MessageManager.log("info", "Integration manager initialized with {COUNT} integrations",
-            "COUNT", String.valueOf(getActiveIntegrationsCount()));
-    }
+   public double getCombinedViolationLevel(Player player) {
+      return 0.0;
+   }
 
-    /**
-     * Initialize Discord bot
-     */
-    private void initializeDiscordBot() {
-        try {
-            String botToken = plugin.getConfig().getString("integrations.discord.bot-token");
-            String notificationChannel = plugin.getConfig().getString("integrations.discord.notification-channel");
-            String commandChannel = plugin.getConfig().getString("integrations.discord.command-channel");
+   public boolean isPlayerExempted(Player player) {
+      return false;
+   }
 
-            if (botToken != null && !botToken.isEmpty()) {
-                discordBot = new DiscordBot();
+   public boolean requestBan(Player player, String reason, long duration) {
+      return false;
+   }
 
-                // Initialize asynchronously
-                discordBot.initialize(botToken, notificationChannel, commandChannel)
-                    .whenComplete((result, throwable) -> {
-                        if (throwable != null) {
-                            MessageManager.log("error", "Failed to initialize Discord bot: {ERROR}",
-                                "ERROR", throwable.getMessage());
-                        }
-                    });
-            }
-        } catch (Exception e) {
-            MessageManager.log("error", "Failed to initialize Discord integration: {ERROR}",
-                "ERROR", e.getMessage());
-        }
-    }
+   public boolean requestKick(Player player, String reason) {
+      return false;
+   }
 
+   public DiscordBot getDiscordBot() {
+      return this.discordBot;
+   }
 
-    /**
-     * Send alert to all integrations
-     */
-    public void sendAlert(String playerName, String alertType, String details, int suspicionLevel) {
-        // Send to Discord
-        if (discordBot != null && discordBot.isEnabled()) {
-            discordBot.sendAlert(playerName, alertType, details, suspicionLevel);
-        }
-    }
+   public List<?> getAntiCheatIntegrations() {
+      return new ArrayList();
+   }
 
-    /**
-     * Send performance report
-     */
-    public void sendPerformanceReport(double tps, int onlinePlayers, int suspiciousPlayers) {
-        if (discordBot != null && discordBot.isEnabled()) {
-            discordBot.sendPerformanceReport(tps, onlinePlayers, suspiciousPlayers);
-        }
-    }
+   public String getStatusInfo() {
+      StringBuilder status = new StringBuilder();
+      status.append("\ud83d\udd17 **Integration Status**\n\n");
+      if (this.discordBot != null && this.discordBot.isEnabled()) {
+         status.append(String.format("\ud83e\udd16 **Discord Bot:** ✅ Active\n"));
+         status.append(String.format("   \ud83d\udcca Ping: %dms\n", this.discordBot.getPing()));
+         status.append(String.format("   \ud83c\udfe0 Guilds: %d\n", this.discordBot.getGuildCount()));
+      } else {
+         status.append("\ud83e\udd16 **Discord Bot:** ❌ Inactive\n");
+      }
 
-    /**
-     * Get combined violation level from all integrations
-     */
-    public double getCombinedViolationLevel(Player player) {
-        // No anti-cheat integrations available
-        return 0.0;
-    }
+      status.append("\n\ud83d\udee1️ **Anti-Cheat Integrations**\n");
+      status.append("   No anti-cheat integrations configured\n");
+      return status.toString();
+   }
 
-    /**
-     * Check if player is exempted in any integration
-     */
-    public boolean isPlayerExempted(Player player) {
-        // No anti-cheat integrations available
-        return false;
-    }
+   public int getActiveIntegrationsCount() {
+      int count = 0;
+      if (this.discordBot != null && this.discordBot.isEnabled()) {
+         count++;
+      }
 
-    /**
-     * Request ban through available integrations
-     */
-    public boolean requestBan(Player player, String reason, long duration) {
-        // No anti-cheat integrations available
-        return false;
-    }
+      return count;
+   }
 
-    /**
-     * Request kick through available integrations
-     */
-    public boolean requestKick(Player player, String reason) {
-        // No anti-cheat integrations available
-        return false;
-    }
+   public void shutdown() {
+      if (this.discordBot != null) {
+         this.discordBot.shutdown();
+      }
 
-    /**
-     * Get Discord bot instance
-     */
-    public DiscordBot getDiscordBot() {
-        return discordBot;
-    }
-
-    /**
-     * Get anti-cheat integrations (none available)
-     */
-    public List<?> getAntiCheatIntegrations() {
-        return new ArrayList<>();
-    }
-
-    /**
-     * Get integration status information
-     */
-    public String getStatusInfo() {
-        StringBuilder status = new StringBuilder();
-
-        status.append("рџ”— **Integration Status**\n\n");
-
-        // Discord status
-        if (discordBot != null && discordBot.isEnabled()) {
-            status.append(String.format("рџ¤– **Discord Bot:** вњ… Active\n"));
-            status.append(String.format("   рџ“Љ Ping: %dms\n", discordBot.getPing()));
-            status.append(String.format("   рџЏ  Guilds: %d\n", discordBot.getGuildCount()));
-        } else {
-            status.append("рџ¤– **Discord Bot:** вќЊ Inactive\n");
-        }
-
-        status.append("\nрџ›ЎпёЏ **Anti-Cheat Integrations**\n");
-        status.append("   No anti-cheat integrations configured\n");
-
-        return status.toString();
-    }
-
-    /**
-     * Get count of active integrations
-     */
-    public int getActiveIntegrationsCount() {
-        int count = 0;
-
-        if (discordBot != null && discordBot.isEnabled()) count++;
-
-        return count;
-    }
-
-    /**
-     * Shutdown all integrations
-     */
-    public void shutdown() {
-        // Shutdown Discord bot
-        if (discordBot != null) {
-            discordBot.shutdown();
-        }
-
-
-        MessageManager.log("info", "All integrations shut down");
-    }
+      MessageManager.log("info", "All integrations shut down");
+   }
 }

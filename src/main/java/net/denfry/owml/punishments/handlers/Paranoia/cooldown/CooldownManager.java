@@ -3,95 +3,59 @@ package net.denfry.owml.punishments.handlers.Paranoia.cooldown;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Manages cooldowns for various paranoia effects
- */
 public class CooldownManager {
+   private final Map<UUID, Map<CooldownManager.CooldownType, Long>> cooldowns = new ConcurrentHashMap<>();
 
-    private final Map<UUID, Map<CooldownType, Long>> cooldowns = new HashMap<>();
+   public boolean isOnCooldown(UUID playerId, CooldownManager.CooldownType type) {
+      if (!this.cooldowns.containsKey(playerId)) {
+         return false;
+      } else {
+         Map<CooldownManager.CooldownType, Long> playerCooldowns = this.cooldowns.get(playerId);
+         return !playerCooldowns.containsKey(type) ? false : System.currentTimeMillis() - playerCooldowns.get(type) < type.getDuration();
+      }
+   }
 
-    /**
-     * Check if a player is on cooldown for a specific effect
-     *
-     * @param playerId The player's UUID
-     * @param type     The cooldown type to check
-     * @return true if the player is on cooldown, false otherwise
-     */
-    public boolean isOnCooldown(UUID playerId, CooldownType type) {
-        if (!cooldowns.containsKey(playerId)) {
-            return false;
-        }
+   public void setCooldown(UUID playerId, CooldownManager.CooldownType type) {
+      this.cooldowns.computeIfAbsent(playerId, k -> new HashMap<>()).put(type, System.currentTimeMillis());
+   }
 
-        Map<CooldownType, Long> playerCooldowns = cooldowns.get(playerId);
-        if (!playerCooldowns.containsKey(type)) {
-            return false;
-        }
+   public long getRemainingCooldown(UUID playerId, CooldownManager.CooldownType type) {
+      if (!this.isOnCooldown(playerId, type)) {
+         return 0L;
+      } else {
+         long elapsedTime = System.currentTimeMillis() - this.cooldowns.get(playerId).get(type);
+         return Math.max(0L, type.getDuration() - elapsedTime);
+      }
+   }
 
-        return System.currentTimeMillis() - playerCooldowns.get(type) < type.getDuration();
-    }
+   public void removeCooldown(UUID playerId, CooldownManager.CooldownType type) {
+      if (this.cooldowns.containsKey(playerId)) {
+         this.cooldowns.get(playerId).remove(type);
+      }
+   }
 
-    /**
-     * Set a cooldown for a player and effect type
-     *
-     * @param playerId The player's UUID
-     * @param type     The cooldown type to set
-     */
-    public void setCooldown(UUID playerId, CooldownType type) {
-        cooldowns.computeIfAbsent(playerId, k -> new HashMap<>()).put(type, System.currentTimeMillis());
-    }
+   public void clearPlayerCooldowns(UUID playerId) {
+      this.cooldowns.remove(playerId);
+   }
 
-    /**
-     * Get the remaining cooldown time in milliseconds
-     *
-     * @param playerId The player's UUID
-     * @param type     The cooldown type to check
-     * @return The remaining cooldown time in milliseconds, or 0 if not on cooldown
-     */
-    public long getRemainingCooldown(UUID playerId, CooldownType type) {
-        if (!isOnCooldown(playerId, type)) {
-            return 0;
-        }
+   public static enum CooldownType {
+      GHOST_MOB(15000L),
+      VISUAL(8000L),
+      FAKE_DAMAGE(30000L),
+      MESSAGE(20000L),
+      SOUND(3000L),
+      NIGHTMARE(1800000L);
 
-        long elapsedTime = System.currentTimeMillis() - cooldowns.get(playerId).get(type);
-        return Math.max(0, type.getDuration() - elapsedTime);
-    }
+      private final long duration;
 
-    /**
-     * Remove a cooldown for a player and effect type
-     *
-     * @param playerId The player's UUID
-     * @param type     The cooldown type to remove
-     */
-    public void removeCooldown(UUID playerId, CooldownType type) {
-        if (cooldowns.containsKey(playerId)) {
-            cooldowns.get(playerId).remove(type);
-        }
-    }
+      private CooldownType(long duration) {
+         this.duration = duration;
+      }
 
-    /**
-     * Clear all cooldowns for a player
-     *
-     * @param playerId The player's UUID
-     */
-    public void clearPlayerCooldowns(UUID playerId) {
-        cooldowns.remove(playerId);
-    }
-
-    /**
-     * Types of cooldowns managed by this class
-     */
-    public enum CooldownType {
-        GHOST_MOB(15000), VISUAL(8000), FAKE_DAMAGE(30000), MESSAGE(20000), SOUND(3000), NIGHTMARE(30 * 60000);
-
-        private final long duration;
-
-        CooldownType(long duration) {
-            this.duration = duration;
-        }
-
-        public long getDuration() {
-            return duration;
-        }
-    }
+      public long getDuration() {
+         return this.duration;
+      }
+   }
 }

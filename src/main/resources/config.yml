@@ -11,18 +11,20 @@ modrinth-id: ""
 
 # Periodic update checking configuration
 periodic-update-checks:
-  enabled: true
+  enabled: false
   interval-hours: 24
 
 # Auto-updates settings
+# Форк под Folia/Tessera: автообновление выключено — апстрим-jar без поддержки Folia заменил бы этот.
 auto-updates:
-  enabled: true
+  enabled: false
 
 # ============= ANTI-XRAY SYSTEM =============
 
 # Decoy ore system - places fake ores to catch xrayers
+# Приманки ставят настоящие блоки руды в мир; на Politernal выключены (только алерты).
 decoy:
-  enabled: true
+  enabled: false
   oreThreshold: 10
   timeWindowTicks: 3600
   distance: 5.0
@@ -49,6 +51,11 @@ ores:
     - DEEPSLATE_GOLD_ORE
     - EMERALD_ORE
     - DEEPSLATE_EMERALD_ORE
+    - REDSTONE_ORE
+    - DEEPSLATE_REDSTONE_ORE
+    - LAPIS_ORE
+    - DEEPSLATE_LAPIS_ORE
+    - ANCIENT_DEBRIS
 
 # ============= PUNISHMENT SYSTEM =============
 
@@ -84,6 +91,17 @@ ml:
   thresholds:
     warning: 60
     auto-punish: 90
+
+  # Мгновенные правила x-ray (Tier 1): флаг за руду-приманку или за долю ценных руд (алмазы, изумруды, древние
+  # обломки) среди всех сломанных блоков. Доля не оценивается, пока не сломано min-blocks блоков.
+  # Честная копка на main 08.11: не больше 0,006 по часам; 0,02 — одна ценная руда на каждые 50 блоков.
+  xray:
+    min-blocks: 500
+    max-valuable-ratio: 0.02
+
+  # Tier 3 (автоэнкодер по средним признакам раз в 5 минут). Признаки не нормированы, поэтому флагует почти всех.
+  deep-profiler:
+    enabled: false
 
   autoAnalysis:
     enabled: true
@@ -155,6 +173,12 @@ composite-punishments:
   max-level: 6
 
 # ============= DATA MANAGEMENT =============
+
+# Сырые данные для настройки детектора: plugins/OverWatch-ML/telemetry/mining-*.csv (почасово по игрокам:
+# камень, руды, руды без открытой грани, высоты) и alerts-*.csv (алерты и ML-флаги). Решений не принимает.
+telemetry:
+  enabled: true
+  flush-minutes: 10
 
 # Stats auto-save settings
 stats:

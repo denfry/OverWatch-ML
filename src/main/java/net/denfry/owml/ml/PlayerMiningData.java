@@ -2,756 +2,624 @@ package net.denfry.owml.ml;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Map.Entry;
+import java.util.concurrent.ConcurrentHashMap;
+import net.denfry.owml.utils.MaterialHelper;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.util.Vector;
 
-/**
- * Stores mining-related data for a player session
- */
 public class PlayerMiningData {
+   private final String playerName;
+   private final long sessionStartTime;
+   private final boolean labeledAsCheater;
+   private final List<PlayerMiningData.BlockBreakRecord> blockBreaks = new ArrayList<>();
+   private final List<PlayerMiningData.BlockBreakRecord> oreBreaks = new ArrayList<>();
+   private final Set<Material> valuableOreMaterials = ConcurrentHashMap.newKeySet();
+   private final Set<Material> diamondOreMaterials = ConcurrentHashMap.newKeySet();
+   private final Set<Material> netheriteOreMaterials = ConcurrentHashMap.newKeySet();
+   private final List<PlayerMiningData.BlockBreakRecord> diamondOreBreaks = new ArrayList<>();
+   private final List<PlayerMiningData.BlockBreakRecord> netheriteOreBreaks = new ArrayList<>();
+   private final List<PlayerMiningData.OreVein> diamondVeins = new ArrayList<>();
+   private final List<PlayerMiningData.OreVein> netheriteVeins = new ArrayList<>();
+   private final int VEIN_PROXIMITY_THRESHOLD = 3;
+   private final List<Double> diamondDistances = new ArrayList<>();
+   private final List<Double> netheriteDistances = new ArrayList<>();
+   private final List<Long> idleTimes = new ArrayList<>();
+   private final Map<String, Double> features = new ConcurrentHashMap<>();
+   private final List<PlayerMiningData.YLevelRecord> yLevelRecords = new ArrayList<>();
+   private final List<Double> yLevelChanges = new ArrayList<>();
+   private final List<Long> timeAtSameYLevel = new ArrayList<>();
+   private final double Y_LEVEL_CHANGE_THRESHOLD = 1.0;
+   private final Map<Material, Integer> oreCounts = new ConcurrentHashMap<>();
+   private final Map<Material, List<PlayerMiningData.OreTimeWindow>> oreTimeWindows = new ConcurrentHashMap<>();
+   private PlayerMiningData.OreVein currentDiamondVein = null;
+   private PlayerMiningData.OreVein currentNetheriteVein = null;
+   private Vector lastDiamondPosition = null;
+   private Vector lastNetheritePosition = null;
+   private Long lastBlockBreakTime = null;
+   private int totalBlocksBroken = 0;
+   private int totalOresMined = 0;
+   private Double lastYLevel = null;
+   private long lastYLevelChangeTime = 0L;
+   private int totalYLevelChanges = 0;
+   private double totalYLevelChangeAmount = 0.0;
 
-    private final String playerName;
-    private final long sessionStartTime;
-    private final boolean labeledAsCheater;
+   public PlayerMiningData(String playerName, boolean labeledAsCheater) {
+      this.playerName = playerName;
+      this.sessionStartTime = System.currentTimeMillis();
+      this.labeledAsCheater = labeledAsCheater;
+      this.initializeValuableOreMaterials();
+      this.initializeDiamondAndNetheriteOreMaterials();
 
+      for (Material oreMaterial : this.valuableOreMaterials) {
+         this.oreTimeWindows.put(oreMaterial, new ArrayList<>());
+      }
+   }
 
-    private final List<BlockBreakRecord> blockBreaks = new ArrayList<>();
-    private final List<BlockBreakRecord> oreBreaks = new ArrayList<>();
-    private final Set<Material> valuableOreMaterials = new HashSet<>();
+   private void initializeValuableOreMaterials() {
+      this.addIfExists("DIAMOND_ORE");
+      this.addIfExists("DEEPSLATE_DIAMOND_ORE");
+      this.addIfExists("ANCIENT_DEBRIS");
+      this.addIfExists("EMERALD_ORE");
+      this.addIfExists("DEEPSLATE_EMERALD_ORE");
+      this.addIfExists("GOLD_ORE");
+      this.addIfExists("DEEPSLATE_GOLD_ORE");
+      this.addIfExists("IRON_ORE");
+      this.addIfExists("DEEPSLATE_IRON_ORE");
+      this.addIfExists("LAPIS_ORE");
+      this.addIfExists("DEEPSLATE_LAPIS_ORE");
+      this.addIfExists("REDSTONE_ORE");
+      this.addIfExists("DEEPSLATE_REDSTONE_ORE");
+      this.addIfExists("COPPER_ORE");
+      this.addIfExists("DEEPSLATE_COPPER_ORE");
+      this.addIfExists("NETHER_GOLD_ORE");
+      this.addIfExists("NETHER_QUARTZ_ORE");
+   }
 
+   private void addIfExists(String materialName) {
+      Material material = MaterialHelper.getMaterial(materialName);
+      if (material != null) {
+         this.valuableOreMaterials.add(material);
+      }
+   }
 
-    private final Set<Material> diamondOreMaterials = new HashSet<>();
-    private final Set<Material> netheriteOreMaterials = new HashSet<>();
-    private final List<BlockBreakRecord> diamondOreBreaks = new ArrayList<>();
-    private final List<BlockBreakRecord> netheriteOreBreaks = new ArrayList<>();
+   private void initializeDiamondAndNetheriteOreMaterials() {
+      this.addMaterialIfExists(this.diamondOreMaterials, "DIAMOND_ORE");
+      this.addMaterialIfExists(this.diamondOreMaterials, "DEEPSLATE_DIAMOND_ORE");
+      this.addMaterialIfExists(this.netheriteOreMaterials, "ANCIENT_DEBRIS");
+   }
 
+   private void addMaterialIfExists(Set<Material> set, String materialName) {
+      Material material = MaterialHelper.getMaterial(materialName);
+      if (material != null) {
+         set.add(material);
+      }
+   }
 
-    private final List<OreVein> diamondVeins = new ArrayList<>();
-    private final List<OreVein> netheriteVeins = new ArrayList<>();
-    private final int VEIN_PROXIMITY_THRESHOLD = 3;
-    private final List<Double> diamondDistances = new ArrayList<>();
-    private final List<Double> netheriteDistances = new ArrayList<>();
-    private final List<Long> idleTimes = new ArrayList<>();
-    private final Map<String, Double> features = new HashMap<>();
-    private final List<YLevelRecord> yLevelRecords = new ArrayList<>();
-    private final List<Double> yLevelChanges = new ArrayList<>();
-    private final List<Long> timeAtSameYLevel = new ArrayList<>();
-    private final double Y_LEVEL_CHANGE_THRESHOLD = 1.0;
-    private final Map<Material, Integer> oreCounts = new HashMap<>();
-    private final Map<Material, List<OreTimeWindow>> oreTimeWindows = new HashMap<>();
-    private OreVein currentDiamondVein = null;
-    private OreVein currentNetheriteVein = null;
-    private Vector lastDiamondPosition = null;
-    private Vector lastNetheritePosition = null;
-    private Long lastBlockBreakTime = null;
-    private int totalBlocksBroken = 0;
-    private int totalOresMined = 0;
-    private Double lastYLevel = null;
-    private long lastYLevelChangeTime = 0;
-    private int totalYLevelChanges = 0;
-    private double totalYLevelChangeAmount = 0;
+   public void recordBlockBreak(Block block, Vector lookDirection) {
+      long timestamp = System.currentTimeMillis();
+      Vector blockPosition = block.getLocation().toVector();
+      Material blockType = block.getType();
+      if (this.lastBlockBreakTime != null) {
+         long idleTime = timestamp - this.lastBlockBreakTime;
+         if (idleTime > 0L && idleTime < 3600000L) {
+            this.idleTimes.add(idleTime);
+         }
+      }
 
-    public PlayerMiningData(String playerName, boolean labeledAsCheater) {
-        this.playerName = playerName;
-        this.sessionStartTime = System.currentTimeMillis();
-        this.labeledAsCheater = labeledAsCheater;
+      this.lastBlockBreakTime = timestamp;
+      PlayerMiningData.BlockBreakRecord record = new PlayerMiningData.BlockBreakRecord(timestamp, blockType, blockPosition);
+      this.blockBreaks.add(record);
+      this.totalBlocksBroken++;
+      if (this.valuableOreMaterials.contains(blockType)) {
+         this.recordOreFound(block);
+      }
 
+      if (this.diamondOreMaterials.contains(blockType)) {
+         this.recordDiamondOreFound(record);
+      }
 
-        initializeValuableOreMaterials();
+      if (this.netheriteOreMaterials.contains(blockType)) {
+         this.recordNetheriteOreFound(record);
+      }
+   }
 
-
-        initializeDiamondAndNetheriteOreMaterials();
-
-
-        for (Material oreMaterial : valuableOreMaterials) {
-            oreTimeWindows.put(oreMaterial, new ArrayList<>());
-        }
-    }
-
-    private void initializeValuableOreMaterials() {
-        // Add only materials that exist in current version
-        addIfExists("DIAMOND_ORE");
-        addIfExists("DEEPSLATE_DIAMOND_ORE");
-        addIfExists("ANCIENT_DEBRIS");
-        addIfExists("EMERALD_ORE");
-        addIfExists("DEEPSLATE_EMERALD_ORE");
-        addIfExists("GOLD_ORE");
-        addIfExists("DEEPSLATE_GOLD_ORE");
-        addIfExists("IRON_ORE");
-        addIfExists("DEEPSLATE_IRON_ORE");
-        addIfExists("LAPIS_ORE");
-        addIfExists("DEEPSLATE_LAPIS_ORE");
-        addIfExists("REDSTONE_ORE");
-        addIfExists("DEEPSLATE_REDSTONE_ORE");
-        addIfExists("COPPER_ORE");
-        addIfExists("DEEPSLATE_COPPER_ORE");
-        addIfExists("NETHER_GOLD_ORE");
-        addIfExists("NETHER_QUARTZ_ORE");
-    }
-
-    private void addIfExists(String materialName) {
-        Material material = net.denfry.owml.utils.MaterialHelper.getMaterial(materialName);
-        if (material != null) {
-            valuableOreMaterials.add(material);
-        }
-    }
-
-    /**
-     * Initialize sets to track specifically diamond and netherite ores
-     */
-    private void initializeDiamondAndNetheriteOreMaterials() {
-        // Add diamond materials only if they exist in the current version
-        addMaterialIfExists(diamondOreMaterials, "DIAMOND_ORE");
-        addMaterialIfExists(diamondOreMaterials, "DEEPSLATE_DIAMOND_ORE");
-
-        // Add netherite materials only if they exist in the current version
-        addMaterialIfExists(netheriteOreMaterials, "ANCIENT_DEBRIS");
-    }
-
-    /**
-     * Add material to set if it exists in the current version
-     */
-    private void addMaterialIfExists(Set<Material> set, String materialName) {
-        Material material = net.denfry.owml.utils.MaterialHelper.getMaterial(materialName);
-        if (material != null) {
-            set.add(material);
-        }
-    }
-
-    /**
-     * Record a block break event
-     */
-    public void recordBlockBreak(Block block, Vector lookDirection) {
-        long timestamp = System.currentTimeMillis();
-        Vector blockPosition = block.getLocation().toVector();
-        Material blockType = block.getType();
-
-
-        if (lastBlockBreakTime != null) {
-            long idleTime = timestamp - lastBlockBreakTime;
-
-            if (idleTime > 0 && idleTime < 3600000) {
-                idleTimes.add(idleTime);
-            }
-        }
-        lastBlockBreakTime = timestamp;
-
-
-        BlockBreakRecord record = new BlockBreakRecord(timestamp, blockType, blockPosition);
-        blockBreaks.add(record);
-        totalBlocksBroken++;
-
-
-        if (valuableOreMaterials.contains(blockType)) {
-            recordOreFound(block);
-        }
-
-
-        if (diamondOreMaterials.contains(blockType)) {
-            recordDiamondOreFound(record);
-        }
-
-
-        if (netheriteOreMaterials.contains(blockType)) {
-            recordNetheriteOreFound(record);
-        }
-    }
-
-    /**
-     * Records player position including Y-level during movement
-     *
-     * @param position The player's current position
-     */
-
-    public void recordPlayerPosition(Vector position) {
-        long timestamp = System.currentTimeMillis();
-        double currentYLevel = position.getY();
-
-
-        YLevelRecord record = new YLevelRecord(timestamp, currentYLevel, position);
-        yLevelRecords.add(record);
-
-
-        if (lastYLevel != null) {
-            double yChange = Math.abs(currentYLevel - lastYLevel);
-
-
-            if (yChange >= Y_LEVEL_CHANGE_THRESHOLD) {
-                yLevelChanges.add(yChange);
-                totalYLevelChanges++;
-                totalYLevelChangeAmount += yChange;
-
-
-                long timeAtLevel = timestamp - lastYLevelChangeTime;
-                if (timeAtLevel > 0 && timeAtLevel < 3600000) {
-                    timeAtSameYLevel.add(timeAtLevel);
-                }
-
-                lastYLevelChangeTime = timestamp;
-            }
-        } else {
-
-            lastYLevelChangeTime = timestamp;
-        }
-
-        lastYLevel = currentYLevel;
-    }
-
-    /**
-     * Record an ore discovery
-     */
-    public void recordOreFound(Block block) {
-        long timestamp = System.currentTimeMillis();
-        Material blockType = block.getType();
-
-        BlockBreakRecord record = new BlockBreakRecord(timestamp, blockType, block.getLocation().toVector());
-        oreBreaks.add(record);
-        totalOresMined++;
-
-
-        oreCounts.put(blockType, oreCounts.getOrDefault(blockType, 0) + 1);
-
-
-        updateTimeWindows(blockType, timestamp);
-    }
-
-    /**
-     * Record diamond ore found and track vein information
-     */
-    private void recordDiamondOreFound(BlockBreakRecord record) {
-        diamondOreBreaks.add(record);
-
-
-        if (lastDiamondPosition != null) {
-            double distance = lastDiamondPosition.distance(record.position);
-            diamondDistances.add(distance);
-        }
-        lastDiamondPosition = record.position;
-
-
-        if (currentDiamondVein == null) {
-
-            currentDiamondVein = new OreVein();
-            currentDiamondVein.addOre(record);
-            diamondVeins.add(currentDiamondVein);
-        } else {
-
-            boolean belongsToCurrentVein = false;
-            for (BlockBreakRecord veinOre : currentDiamondVein.ores) {
-                double distance = veinOre.position.distance(record.position);
-                if (distance <= VEIN_PROXIMITY_THRESHOLD) {
-                    belongsToCurrentVein = true;
-                    break;
-                }
+   public void recordPlayerPosition(Vector position) {
+      long timestamp = System.currentTimeMillis();
+      double currentYLevel = position.getY();
+      PlayerMiningData.YLevelRecord record = new PlayerMiningData.YLevelRecord(timestamp, currentYLevel, position);
+      this.yLevelRecords.add(record);
+      if (this.lastYLevel != null) {
+         double yChange = Math.abs(currentYLevel - this.lastYLevel);
+         if (yChange >= 1.0) {
+            this.yLevelChanges.add(yChange);
+            this.totalYLevelChanges++;
+            this.totalYLevelChangeAmount += yChange;
+            long timeAtLevel = timestamp - this.lastYLevelChangeTime;
+            if (timeAtLevel > 0L && timeAtLevel < 3600000L) {
+               this.timeAtSameYLevel.add(timeAtLevel);
             }
 
-            if (belongsToCurrentVein) {
+            this.lastYLevelChangeTime = timestamp;
+         }
+      } else {
+         this.lastYLevelChangeTime = timestamp;
+      }
 
-                currentDiamondVein.addOre(record);
-            } else {
+      this.lastYLevel = currentYLevel;
+   }
 
-                currentDiamondVein = new OreVein();
-                currentDiamondVein.addOre(record);
-                diamondVeins.add(currentDiamondVein);
+   public void recordOreFound(Block block) {
+      long timestamp = System.currentTimeMillis();
+      Material blockType = block.getType();
+      PlayerMiningData.BlockBreakRecord record = new PlayerMiningData.BlockBreakRecord(timestamp, blockType, block.getLocation().toVector());
+      this.oreBreaks.add(record);
+      this.totalOresMined++;
+      this.oreCounts.put(blockType, this.oreCounts.getOrDefault(blockType, 0) + 1);
+      this.updateTimeWindows(blockType, timestamp);
+   }
+
+   private void recordDiamondOreFound(PlayerMiningData.BlockBreakRecord record) {
+      this.diamondOreBreaks.add(record);
+      if (this.lastDiamondPosition != null) {
+         double distance = this.lastDiamondPosition.distance(record.position);
+         this.diamondDistances.add(distance);
+      }
+
+      this.lastDiamondPosition = record.position;
+      if (this.currentDiamondVein == null) {
+         this.currentDiamondVein = new PlayerMiningData.OreVein();
+         this.currentDiamondVein.addOre(record);
+         this.diamondVeins.add(this.currentDiamondVein);
+      } else {
+         boolean belongsToCurrentVein = false;
+
+         for (PlayerMiningData.BlockBreakRecord veinOre : this.currentDiamondVein.ores) {
+            double distance = veinOre.position.distance(record.position);
+            if (distance <= 3.0) {
+               belongsToCurrentVein = true;
+               break;
             }
-        }
-    }
+         }
 
-    /**
-     * Record netherite ore found and track vein information
-     */
-    private void recordNetheriteOreFound(BlockBreakRecord record) {
-        netheriteOreBreaks.add(record);
+         if (belongsToCurrentVein) {
+            this.currentDiamondVein.addOre(record);
+         } else {
+            this.currentDiamondVein = new PlayerMiningData.OreVein();
+            this.currentDiamondVein.addOre(record);
+            this.diamondVeins.add(this.currentDiamondVein);
+         }
+      }
+   }
 
+   private void recordNetheriteOreFound(PlayerMiningData.BlockBreakRecord record) {
+      this.netheriteOreBreaks.add(record);
+      if (this.lastNetheritePosition != null) {
+         double distance = this.lastNetheritePosition.distance(record.position);
+         this.netheriteDistances.add(distance);
+      }
 
-        if (lastNetheritePosition != null) {
-            double distance = lastNetheritePosition.distance(record.position);
-            netheriteDistances.add(distance);
-        }
-        lastNetheritePosition = record.position;
+      this.lastNetheritePosition = record.position;
+      if (this.currentNetheriteVein == null) {
+         this.currentNetheriteVein = new PlayerMiningData.OreVein();
+         this.currentNetheriteVein.addOre(record);
+         this.netheriteVeins.add(this.currentNetheriteVein);
+      } else {
+         boolean belongsToCurrentVein = false;
 
-
-        if (currentNetheriteVein == null) {
-
-            currentNetheriteVein = new OreVein();
-            currentNetheriteVein.addOre(record);
-            netheriteVeins.add(currentNetheriteVein);
-        } else {
-
-            boolean belongsToCurrentVein = false;
-            for (BlockBreakRecord veinOre : currentNetheriteVein.ores) {
-                double distance = veinOre.position.distance(record.position);
-                if (distance <= VEIN_PROXIMITY_THRESHOLD) {
-                    belongsToCurrentVein = true;
-                    break;
-                }
+         for (PlayerMiningData.BlockBreakRecord veinOre : this.currentNetheriteVein.ores) {
+            double distance = veinOre.position.distance(record.position);
+            if (distance <= 3.0) {
+               belongsToCurrentVein = true;
+               break;
             }
+         }
 
-            if (belongsToCurrentVein) {
+         if (belongsToCurrentVein) {
+            this.currentNetheriteVein.addOre(record);
+         } else {
+            this.currentNetheriteVein = new PlayerMiningData.OreVein();
+            this.currentNetheriteVein.addOre(record);
+            this.netheriteVeins.add(this.currentNetheriteVein);
+         }
+      }
+   }
 
-                currentNetheriteVein.addOre(record);
-            } else {
+   private void updateTimeWindows(Material oreType, long timestamp) {
+      List<PlayerMiningData.OreTimeWindow> windows = this.oreTimeWindows.get(oreType);
+      if (windows.isEmpty()) {
+         windows.add(new PlayerMiningData.OreTimeWindow(60000L));
+         windows.add(new PlayerMiningData.OreTimeWindow(180000L));
+         windows.add(new PlayerMiningData.OreTimeWindow(300000L));
+         windows.add(new PlayerMiningData.OreTimeWindow(600000L));
+      }
 
-                currentNetheriteVein = new OreVein();
-                currentNetheriteVein.addOre(record);
-                netheriteVeins.add(currentNetheriteVein);
-            }
-        }
-    }
+      for (PlayerMiningData.OreTimeWindow window : windows) {
+         window.addOre(timestamp);
+      }
+   }
 
-    /**
-     * Update time-based windows for ore mining rates
-     */
-    private void updateTimeWindows(Material oreType, long timestamp) {
-        List<OreTimeWindow> windows = oreTimeWindows.get(oreType);
+   private boolean isVeinInLinePattern(PlayerMiningData.OreVein vein) {
+      if (vein.ores.size() < 3) {
+         return false;
+      } else {
+         List<Vector> positions = new ArrayList<>();
 
-
-        if (windows.isEmpty()) {
-            windows.add(new OreTimeWindow(60000));
-            windows.add(new OreTimeWindow(180000));
-            windows.add(new OreTimeWindow(300000));
-            windows.add(new OreTimeWindow(600000));
-        }
-
-
-        for (OreTimeWindow window : windows) {
-            window.addOre(timestamp);
-        }
-    }
-
-    /**
-     * Determine if a vein forms a line pattern (at least 3 ores in almost straight line)
-     */
-    private boolean isVeinInLinePattern(OreVein vein) {
-        if (vein.ores.size() < 3) {
-            return false;
-        }
-
-
-        List<Vector> positions = new ArrayList<>();
-        for (BlockBreakRecord ore : vein.ores) {
+         for (PlayerMiningData.BlockBreakRecord ore : vein.ores) {
             positions.add(ore.position);
-        }
+         }
 
-
-        if (positions.size() == 3) {
+         if (positions.size() == 3) {
             double d12 = positions.get(0).distance(positions.get(1));
             double d23 = positions.get(1).distance(positions.get(2));
             double d13 = positions.get(0).distance(positions.get(2));
-
-
             return Math.abs(d13 - (d12 + d23)) < 0.5;
-        }
+         } else {
+            if (positions.size() > 3) {
+               Vector prev = null;
+               Vector current = null;
+               Vector direction = null;
+               double totalAngleDeviation = 0.0;
+               int angleCount = 0;
 
+               for (Vector pos : positions) {
+                  if (prev == null) {
+                     prev = pos;
+                  } else if (current == null) {
+                     current = pos;
+                     direction = pos.clone().subtract(prev);
+                     direction.normalize();
+                  } else {
+                     Vector newDirection = pos.clone().subtract(current);
+                     newDirection.normalize();
+                     double dot = direction.dot(newDirection);
+                     dot = Math.max(-1.0, Math.min(1.0, dot));
+                     double angle = Math.acos(dot);
+                     double deviation = Math.abs(angle - Math.PI);
+                     totalAngleDeviation += deviation;
+                     angleCount++;
+                     prev = current;
+                     current = pos;
+                     direction = newDirection;
+                  }
+               }
 
-        if (positions.size() > 3) {
-            Vector prev = null;
-            Vector current = null;
-            Vector direction = null;
-            double totalAngleDeviation = 0;
-            int angleCount = 0;
-
-            for (Vector pos : positions) {
-                if (prev == null) {
-                    prev = pos;
-                    continue;
-                }
-                if (current == null) {
-                    current = pos;
-                    direction = current.clone().subtract(prev);
-                    direction.normalize();
-                    continue;
-                }
-
-
-                Vector newDirection = pos.clone().subtract(current);
-                newDirection.normalize();
-
-
-                double dot = direction.dot(newDirection);
-
-                dot = Math.max(-1, Math.min(1, dot));
-                double angle = Math.acos(dot);
-
-
-                double deviation = Math.abs(angle - Math.PI);
-                totalAngleDeviation += deviation;
-                angleCount++;
-
-
-                prev = current;
-                current = pos;
-                direction = newDirection;
+               if (angleCount > 0) {
+                  double avgDeviation = totalAngleDeviation / angleCount;
+                  return avgDeviation < 0.3;
+               }
             }
 
+            return false;
+         }
+      }
+   }
 
-            if (angleCount > 0) {
-                double avgDeviation = totalAngleDeviation / angleCount;
-                return avgDeviation < 0.3;
-            }
-        }
+   public void calculateDerivedFeatures() {
+      long totalMiningTimeMs = System.currentTimeMillis() - this.sessionStartTime;
+      this.features.put("total_mining_time_seconds", totalMiningTimeMs / 1000.0);
+      this.features.put("total_blocks_broken", (double)this.totalBlocksBroken);
+      this.features.put("total_ores_mined", (double)this.totalOresMined);
 
-        return false;
-    }
+      for (Material oreMaterial : this.valuableOreMaterials) {
+         String oreName = oreMaterial.toString().toLowerCase();
+         this.features.put("ore_count_" + oreName, (double)this.oreCounts.getOrDefault(oreMaterial, 0).intValue());
+      }
 
-    /**
-     * Calculate all derived features from raw data
-     */
-    public void calculateDerivedFeatures() {
-
-        long totalMiningTimeMs = System.currentTimeMillis() - sessionStartTime;
-        features.put("total_mining_time_seconds", totalMiningTimeMs / 1000.0);
-
-
-        features.put("total_blocks_broken", (double) totalBlocksBroken);
-
-
-        features.put("total_ores_mined", (double) totalOresMined);
-
-
-        for (Material oreMaterial : valuableOreMaterials) {
+      for (Material oreMaterial : this.valuableOreMaterials) {
+         if (this.oreTimeWindows.containsKey(oreMaterial)) {
+            List<PlayerMiningData.OreTimeWindow> windows = this.oreTimeWindows.get(oreMaterial);
             String oreName = oreMaterial.toString().toLowerCase();
-            features.put("ore_count_" + oreName, (double) oreCounts.getOrDefault(oreMaterial, 0));
-        }
 
+            for (PlayerMiningData.OreTimeWindow window : windows) {
+               String windowName;
+               if (window.windowSizeMs == 60000L) {
+                  windowName = "1min";
+               } else if (window.windowSizeMs == 180000L) {
+                  windowName = "3min";
+               } else if (window.windowSizeMs == 300000L) {
+                  windowName = "5min";
+               } else {
+                  if (window.windowSizeMs != 600000L) {
+                     continue;
+                  }
 
-        for (Material oreMaterial : valuableOreMaterials) {
-            if (oreTimeWindows.containsKey(oreMaterial)) {
-                List<OreTimeWindow> windows = oreTimeWindows.get(oreMaterial);
-                String oreName = oreMaterial.toString().toLowerCase();
+                  windowName = "10min";
+               }
 
-
-                for (OreTimeWindow window : windows) {
-                    String windowName;
-                    if (window.windowSizeMs == 60000) windowName = "1min";
-                    else if (window.windowSizeMs == 180000) windowName = "3min";
-                    else if (window.windowSizeMs == 300000) windowName = "5min";
-                    else if (window.windowSizeMs == 600000) windowName = "10min";
-                    else continue;
-
-                    features.put("ore_rate_" + oreName + "_" + windowName, window.getMaxRate());
-                }
+               this.features.put("ore_rate_" + oreName + "_" + windowName, window.getMaxRate());
             }
-        }
+         }
+      }
 
+      int totalDiamondVeins = this.diamondVeins.size();
+      int totalDiamondOresInVeins = 0;
+      int diamondVeinsInLinePattern = 0;
 
-        int totalDiamondVeins = diamondVeins.size();
-        int totalDiamondOresInVeins = 0;
-        int diamondVeinsInLinePattern = 0;
+      for (PlayerMiningData.OreVein vein : this.diamondVeins) {
+         totalDiamondOresInVeins += vein.ores.size();
+         if (this.isVeinInLinePattern(vein)) {
+            diamondVeinsInLinePattern++;
+         }
+      }
 
-        for (OreVein vein : diamondVeins) {
-            totalDiamondOresInVeins += vein.ores.size();
-            if (isVeinInLinePattern(vein)) {
-                diamondVeinsInLinePattern++;
-            }
-        }
+      double avgDiamondVeinSize = totalDiamondVeins > 0 ? (double)totalDiamondOresInVeins / totalDiamondVeins : 0.0;
+      this.features.put("avg_diamond_vein_size", avgDiamondVeinSize);
+      int totalNetheriteVeins = this.netheriteVeins.size();
+      int totalNetheriteOresInVeins = 0;
 
+      for (PlayerMiningData.OreVein veinx : this.netheriteVeins) {
+         totalNetheriteOresInVeins += veinx.ores.size();
+      }
 
-        double avgDiamondVeinSize = totalDiamondVeins > 0 ? (double) totalDiamondOresInVeins / totalDiamondVeins : 0;
-        features.put("avg_diamond_vein_size", avgDiamondVeinSize);
+      double avgAncientDebrisVeinSize = totalNetheriteVeins > 0 ? (double)totalNetheriteOresInVeins / totalNetheriteVeins : 0.0;
+      this.features.put("avg_ancient_debris_vein_size", avgAncientDebrisVeinSize);
+      double avgDiamondDistance = 0.0;
+      if (!this.diamondDistances.isEmpty()) {
+         double totalDiamondDistance = 0.0;
 
+         for (double distance : this.diamondDistances) {
+            totalDiamondDistance += distance;
+         }
 
-        int totalNetheriteVeins = netheriteVeins.size();
-        int totalNetheriteOresInVeins = 0;
+         avgDiamondDistance = totalDiamondDistance / this.diamondDistances.size();
+      }
 
-        for (OreVein vein : netheriteVeins) {
-            totalNetheriteOresInVeins += vein.ores.size();
-        }
+      this.features.put("avg_distance_between_diamonds", avgDiamondDistance);
+      double avgNetheriteDistance = 0.0;
+      if (!this.netheriteDistances.isEmpty()) {
+         double totalNetheriteDistance = 0.0;
 
+         for (double distance : this.netheriteDistances) {
+            totalNetheriteDistance += distance;
+         }
 
-        double avgAncientDebrisVeinSize = totalNetheriteVeins > 0 ? (double) totalNetheriteOresInVeins / totalNetheriteVeins : 0;
-        features.put("avg_ancient_debris_vein_size", avgAncientDebrisVeinSize);
+         avgNetheriteDistance = totalNetheriteDistance / this.netheriteDistances.size();
+      }
 
+      this.features.put("avg_distance_between_netherite", avgNetheriteDistance);
+      double avgIdleTime = 0.0;
+      if (!this.idleTimes.isEmpty()) {
+         long totalIdleTime = 0L;
 
-        double avgDiamondDistance = 0;
-        if (!diamondDistances.isEmpty()) {
-            double totalDiamondDistance = 0;
-            for (double distance : diamondDistances) {
-                totalDiamondDistance += distance;
-            }
-            avgDiamondDistance = totalDiamondDistance / diamondDistances.size();
-        }
-        features.put("avg_distance_between_diamonds", avgDiamondDistance);
+         for (long idleTime : this.idleTimes) {
+            totalIdleTime += idleTime;
+         }
 
+         avgIdleTime = (double)totalIdleTime / this.idleTimes.size() / 1000.0;
+      }
 
-        double avgNetheriteDistance = 0;
-        if (!netheriteDistances.isEmpty()) {
-            double totalNetheriteDistance = 0;
-            for (double distance : netheriteDistances) {
-                totalNetheriteDistance += distance;
-            }
-            avgNetheriteDistance = totalNetheriteDistance / netheriteDistances.size();
-        }
-        features.put("avg_distance_between_netherite", avgNetheriteDistance);
+      this.features.put("avg_idle_time_seconds", avgIdleTime);
+      double avgYLevelChange = 0.0;
+      if (!this.yLevelChanges.isEmpty()) {
+         double totalChanges = 0.0;
 
+         for (double change : this.yLevelChanges) {
+            totalChanges += change;
+         }
 
-        double avgIdleTime = 0;
-        if (!idleTimes.isEmpty()) {
-            long totalIdleTime = 0;
-            for (long idleTime : idleTimes) {
-                totalIdleTime += idleTime;
-            }
-            avgIdleTime = totalIdleTime / (double) idleTimes.size() / 1000.0;
-        }
-        features.put("avg_idle_time_seconds", avgIdleTime);
+         avgYLevelChange = totalChanges / this.yLevelChanges.size();
+      }
 
+      this.features.put("avg_y_level_change", avgYLevelChange);
+      double avgTimeAtSameYLevel = 0.0;
+      if (!this.timeAtSameYLevel.isEmpty()) {
+         long totalTime = 0L;
 
-        double avgYLevelChange = 0;
-        if (!yLevelChanges.isEmpty()) {
-            double totalChanges = 0;
-            for (double change : yLevelChanges) {
-                totalChanges += change;
-            }
-            avgYLevelChange = totalChanges / yLevelChanges.size();
-        }
-        features.put("avg_y_level_change", avgYLevelChange);
+         for (long time : this.timeAtSameYLevel) {
+            totalTime += time;
+         }
 
+         avgTimeAtSameYLevel = (double)totalTime / this.timeAtSameYLevel.size() / 1000.0;
+      }
 
-        double avgTimeAtSameYLevel = 0;
-        if (!timeAtSameYLevel.isEmpty()) {
-            long totalTime = 0;
-            for (long time : timeAtSameYLevel) {
-                totalTime += time;
-            }
-            avgTimeAtSameYLevel = totalTime / (double) timeAtSameYLevel.size() / 1000.0;
-        }
-        features.put("avg_time_at_same_y_level", avgTimeAtSameYLevel);
+      this.features.put("avg_time_at_same_y_level", avgTimeAtSameYLevel);
+      double miningTimeMinutes = totalMiningTimeMs / 60000.0;
+      double yLevelChangesPerMinute = this.totalYLevelChanges / miningTimeMinutes;
+      this.features.put("y_level_changes_per_minute", yLevelChangesPerMinute);
+      Map<Integer, Long> yLevelFrequency = new HashMap<>();
+      long totalRecordedTime = 0L;
 
+      for (int i = 1; i < this.yLevelRecords.size(); i++) {
+         PlayerMiningData.YLevelRecord current = this.yLevelRecords.get(i);
+         PlayerMiningData.YLevelRecord previous = this.yLevelRecords.get(i - 1);
+         int yInt = (int)previous.yLevel;
+         long timeSpent = current.timestamp - previous.timestamp;
+         if (timeSpent > 0L && timeSpent < 3600000L) {
+            yLevelFrequency.put(yInt, yLevelFrequency.getOrDefault(yInt, 0L) + timeSpent);
+            totalRecordedTime += timeSpent;
+         }
+      }
 
-        double miningTimeMinutes = totalMiningTimeMs / 60000.0;
-        double yLevelChangesPerMinute = totalYLevelChanges / miningTimeMinutes;
-        features.put("y_level_changes_per_minute", yLevelChangesPerMinute);
+      long maxTimeAtYLevel = 0L;
+      int mostCommonYLevel = 0;
 
+      for (Entry<Integer, Long> entry : yLevelFrequency.entrySet()) {
+         if (entry.getValue() > maxTimeAtYLevel) {
+            maxTimeAtYLevel = entry.getValue();
+            mostCommonYLevel = entry.getKey();
+         }
+      }
 
-        Map<Integer, Long> yLevelFrequency = new HashMap<>();
-        long totalRecordedTime = 0;
+      double percentTimeAtMostCommonYLevel = 0.0;
+      if (totalRecordedTime > 0L) {
+         percentTimeAtMostCommonYLevel = maxTimeAtYLevel * 100.0 / totalRecordedTime;
+      }
 
+      this.features.put("percent_time_at_most_common_y", percentTimeAtMostCommonYLevel);
+      this.features.put("most_common_y_level", (double)mostCommonYLevel);
+      List<Double> yChangesBeforeValuableOre = new ArrayList<>();
+      List<Double> yChangesAfterValuableOre = new ArrayList<>();
+      long TIME_WINDOW = 10000L;
 
-        for (int i = 1; i < yLevelRecords.size(); i++) {
-            YLevelRecord current = yLevelRecords.get(i);
-            YLevelRecord previous = yLevelRecords.get(i - 1);
+      for (PlayerMiningData.BlockBreakRecord oreBreak : this.oreBreaks) {
+         if (this.valuableOreMaterials.contains(oreBreak.material)) {
+            List<PlayerMiningData.YLevelRecord> beforeRecords = new ArrayList<>();
+            List<PlayerMiningData.YLevelRecord> afterRecords = new ArrayList<>();
 
-            int yInt = (int) previous.yLevel;
-            long timeSpent = current.timestamp - previous.timestamp;
-
-            if (timeSpent > 0 && timeSpent < 3600000) {
-                yLevelFrequency.put(yInt, yLevelFrequency.getOrDefault(yInt, 0L) + timeSpent);
-                totalRecordedTime += timeSpent;
-            }
-        }
-
-
-        long maxTimeAtYLevel = 0;
-        int mostCommonYLevel = 0;
-
-        for (Map.Entry<Integer, Long> entry : yLevelFrequency.entrySet()) {
-            if (entry.getValue() > maxTimeAtYLevel) {
-                maxTimeAtYLevel = entry.getValue();
-                mostCommonYLevel = entry.getKey();
-            }
-        }
-
-        double percentTimeAtMostCommonYLevel = 0;
-        if (totalRecordedTime > 0) {
-            percentTimeAtMostCommonYLevel = (maxTimeAtYLevel * 100.0) / totalRecordedTime;
-        }
-
-        features.put("percent_time_at_most_common_y", percentTimeAtMostCommonYLevel);
-        features.put("most_common_y_level", (double) mostCommonYLevel);
-
-
-        List<Double> yChangesBeforeValuableOre = new ArrayList<>();
-        List<Double> yChangesAfterValuableOre = new ArrayList<>();
-
-
-        final long TIME_WINDOW = 10000;
-
-        for (BlockBreakRecord oreBreak : oreBreaks) {
-            if (valuableOreMaterials.contains(oreBreak.material)) {
-
-                List<YLevelRecord> beforeRecords = new ArrayList<>();
-                List<YLevelRecord> afterRecords = new ArrayList<>();
-
-
-                for (YLevelRecord yRecord : yLevelRecords) {
-                    long timeDiff = yRecord.timestamp - oreBreak.timestamp;
-
-                    if (timeDiff < 0 && Math.abs(timeDiff) <= TIME_WINDOW) {
-                        beforeRecords.add(yRecord);
-                    } else if (timeDiff > 0 && timeDiff <= TIME_WINDOW) {
-                        afterRecords.add(yRecord);
-                    }
-                }
-
-
-                if (beforeRecords.size() >= 2) {
-                    double totalYChange = Math.abs(beforeRecords.get(0).yLevel - beforeRecords.get(beforeRecords.size() - 1).yLevel);
-                    yChangesBeforeValuableOre.add(totalYChange);
-                }
-
-
-                if (afterRecords.size() >= 2) {
-                    double totalYChange = Math.abs(afterRecords.get(0).yLevel - afterRecords.get(afterRecords.size() - 1).yLevel);
-                    yChangesAfterValuableOre.add(totalYChange);
-                }
-            }
-        }
-
-
-        double avgYChangeBeforeOre = 0;
-        if (!yChangesBeforeValuableOre.isEmpty()) {
-            double sum = 0;
-            for (Double change : yChangesBeforeValuableOre) {
-                sum += change;
-            }
-            avgYChangeBeforeOre = sum / yChangesBeforeValuableOre.size();
-        }
-        features.put("avg_y_change_before_ore", avgYChangeBeforeOre);
-
-
-        double avgYChangeAfterOre = 0;
-        if (!yChangesAfterValuableOre.isEmpty()) {
-            double sum = 0;
-            for (Double change : yChangesAfterValuableOre) {
-                sum += change;
-            }
-            avgYChangeAfterOre = sum / yChangesAfterValuableOre.size();
-        }
-        features.put("avg_y_change_after_ore", avgYChangeAfterOre);
-
-
-        double minY = Double.MAX_VALUE;
-        double maxY = Double.MIN_VALUE;
-
-        for (YLevelRecord record : yLevelRecords) {
-            minY = Math.min(minY, record.yLevel);
-            maxY = Math.max(maxY, record.yLevel);
-        }
-
-        double yRange = (minY != Double.MAX_VALUE && maxY != Double.MIN_VALUE) ? (maxY - minY) : 0;
-        features.put("y_level_range", yRange);
-
-
-        double yLevelVariance = 0;
-        if (yLevelRecords.size() > 1) {
-
-            double sumY = 0;
-            for (YLevelRecord record : yLevelRecords) {
-                sumY += record.yLevel;
-            }
-            double meanY = sumY / yLevelRecords.size();
-
-
-            double sumSquaredDiff = 0;
-            for (YLevelRecord record : yLevelRecords) {
-                double diff = record.yLevel - meanY;
-                sumSquaredDiff += diff * diff;
+            for (PlayerMiningData.YLevelRecord yRecord : this.yLevelRecords) {
+               long timeDiff = yRecord.timestamp - oreBreak.timestamp;
+               if (timeDiff < 0L && Math.abs(timeDiff) <= 10000L) {
+                  beforeRecords.add(yRecord);
+               } else if (timeDiff > 0L && timeDiff <= 10000L) {
+                  afterRecords.add(yRecord);
+               }
             }
 
-            yLevelVariance = sumSquaredDiff / yLevelRecords.size();
-        }
-        features.put("y_level_variance", yLevelVariance);
-        features.put("y_level_std_dev", Math.sqrt(yLevelVariance));
-    }
+            if (beforeRecords.size() >= 2) {
+               double totalYChange = Math.abs(beforeRecords.get(0).yLevel - beforeRecords.get(beforeRecords.size() - 1).yLevel);
+               yChangesBeforeValuableOre.add(totalYChange);
+            }
 
-    public String getPlayerName() {
-        return playerName;
-    }
+            if (afterRecords.size() >= 2) {
+               double totalYChange = Math.abs(afterRecords.get(0).yLevel - afterRecords.get(afterRecords.size() - 1).yLevel);
+               yChangesAfterValuableOre.add(totalYChange);
+            }
+         }
+      }
 
-    public boolean isLabeledAsCheater() {
-        return labeledAsCheater;
-    }
+      double avgYChangeBeforeOre = 0.0;
+      if (!yChangesBeforeValuableOre.isEmpty()) {
+         double sum = 0.0;
 
-    public Map<String, Double> getFeatures() {
-        return features;
-    }
+         for (Double change : yChangesBeforeValuableOre) {
+            sum += change;
+         }
 
-    public List<BlockBreakRecord> getBlockBreaks() {
-        return blockBreaks;
-    }
+         avgYChangeBeforeOre = sum / yChangesBeforeValuableOre.size();
+      }
 
-    public List<BlockBreakRecord> getOreBreaks() {
-        return oreBreaks;
-    }
+      this.features.put("avg_y_change_before_ore", avgYChangeBeforeOre);
+      double avgYChangeAfterOre = 0.0;
+      if (!yChangesAfterValuableOre.isEmpty()) {
+         double sum = 0.0;
 
-    public long getTotalMiningTimeMs() {
-        return System.currentTimeMillis() - sessionStartTime;
-    }
+         for (Double change : yChangesAfterValuableOre) {
+            sum += change;
+         }
 
-    static class YLevelRecord {
-        final long timestamp;
-        final double yLevel;
-        final Vector position;
+         avgYChangeAfterOre = sum / yChangesAfterValuableOre.size();
+      }
 
-        YLevelRecord(long timestamp, double yLevel, Vector position) {
-            this.timestamp = timestamp;
-            this.yLevel = yLevel;
-            this.position = position;
-        }
-    }
+      this.features.put("avg_y_change_after_ore", avgYChangeAfterOre);
+      double minY = Double.MAX_VALUE;
+      double maxY = Double.MIN_VALUE;
 
-    static class BlockBreakRecord {
-        final long timestamp;
-        final Material material;
-        final Vector position;
+      for (PlayerMiningData.YLevelRecord record : this.yLevelRecords) {
+         minY = Math.min(minY, record.yLevel);
+         maxY = Math.max(maxY, record.yLevel);
+      }
 
-        BlockBreakRecord(long timestamp, Material material, Vector position) {
-            this.timestamp = timestamp;
-            this.material = material;
-            this.position = position;
-        }
-    }
+      double yRange = minY != Double.MAX_VALUE && maxY != Double.MIN_VALUE ? maxY - minY : 0.0;
+      this.features.put("y_level_range", yRange);
+      double yLevelVariance = 0.0;
+      if (this.yLevelRecords.size() > 1) {
+         double sumY = 0.0;
 
-    /**
-     * Helper class to track ore veins
-     */
-    static class OreVein {
-        final List<BlockBreakRecord> ores = new ArrayList<>();
+         for (PlayerMiningData.YLevelRecord record : this.yLevelRecords) {
+            sumY += record.yLevel;
+         }
 
-        void addOre(BlockBreakRecord ore) {
-            ores.add(ore);
-        }
+         double meanY = sumY / this.yLevelRecords.size();
+         double sumSquaredDiff = 0.0;
 
-        int getSize() {
-            return ores.size();
-        }
-    }
+         for (PlayerMiningData.YLevelRecord record : this.yLevelRecords) {
+            double diff = record.yLevel - meanY;
+            sumSquaredDiff += diff * diff;
+         }
 
-    /**
-     * Helper class to track ore mining rates over a specific time window
-     */
-    static class OreTimeWindow {
-        final long windowSizeMs;
-        final List<Long> oreTimestamps = new ArrayList<>();
+         yLevelVariance = sumSquaredDiff / this.yLevelRecords.size();
+      }
 
-        OreTimeWindow(long windowSizeMs) {
-            this.windowSizeMs = windowSizeMs;
-        }
+      this.features.put("y_level_variance", yLevelVariance);
+      this.features.put("y_level_std_dev", Math.sqrt(yLevelVariance));
+   }
 
-        void addOre(long timestamp) {
-            oreTimestamps.add(timestamp);
+   public String getPlayerName() {
+      return this.playerName;
+   }
 
+   public boolean isLabeledAsCheater() {
+      return this.labeledAsCheater;
+   }
 
-            long cutoffTime = timestamp - windowSizeMs;
-            oreTimestamps.removeIf(t -> t < cutoffTime);
-        }
+   public Map<String, Double> getFeatures() {
+      return this.features;
+   }
 
-        /**
-         * Get the maximum mining rate within this time window
-         *
-         * @return Ores per minute
-         */
-        double getMaxRate() {
-            if (oreTimestamps.isEmpty()) return 0.0;
+   public List<PlayerMiningData.BlockBreakRecord> getBlockBreaks() {
+      return this.blockBreaks;
+   }
 
-            int count = oreTimestamps.size();
+   public List<PlayerMiningData.BlockBreakRecord> getOreBreaks() {
+      return this.oreBreaks;
+   }
 
-            return (count * 60000.0) / windowSizeMs;
-        }
-    }
+   public long getTotalMiningTimeMs() {
+      return System.currentTimeMillis() - this.sessionStartTime;
+   }
+
+   static class BlockBreakRecord {
+      final long timestamp;
+      final Material material;
+      final Vector position;
+
+      BlockBreakRecord(long timestamp, Material material, Vector position) {
+         this.timestamp = timestamp;
+         this.material = material;
+         this.position = position;
+      }
+   }
+
+   static class OreTimeWindow {
+      final long windowSizeMs;
+      final List<Long> oreTimestamps = new ArrayList<>();
+
+      OreTimeWindow(long windowSizeMs) {
+         this.windowSizeMs = windowSizeMs;
+      }
+
+      void addOre(long timestamp) {
+         this.oreTimestamps.add(timestamp);
+         long cutoffTime = timestamp - this.windowSizeMs;
+         this.oreTimestamps.removeIf(t -> t < cutoffTime);
+      }
+
+      double getMaxRate() {
+         if (this.oreTimestamps.isEmpty()) {
+            return 0.0;
+         } else {
+            int count = this.oreTimestamps.size();
+            return count * 60000.0 / this.windowSizeMs;
+         }
+      }
+   }
+
+   static class OreVein {
+      final List<PlayerMiningData.BlockBreakRecord> ores = new ArrayList<>();
+
+      void addOre(PlayerMiningData.BlockBreakRecord ore) {
+         this.ores.add(ore);
+      }
+
+      int getSize() {
+         return this.ores.size();
+      }
+   }
+
+   static class YLevelRecord {
+      final long timestamp;
+      final double yLevel;
+      final Vector position;
+
+      YLevelRecord(long timestamp, double yLevel, Vector position) {
+         this.timestamp = timestamp;
+         this.yLevel = yLevel;
+         this.position = position;
+      }
+   }
 }

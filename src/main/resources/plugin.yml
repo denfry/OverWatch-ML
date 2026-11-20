@@ -1,9 +1,8 @@
 name: OverWatch-ML
-version: '2.2.1'
+version: '2.2.2'
 main: net.denfry.owml.OverWatchML
 api-version: '1.21'
-depend: [ProtocolLib]
-softdepend: [Paper, Folia]
+softdepend: [ProtocolLib]
 folia-supported: true
 description: Advanced OverWatch-ML with ML detection, behavioral profiling, and adaptive systems. Supports Minecraft 1.21+.
 permissions:
@@ -16,6 +15,9 @@ permissions:
   owml.staff:
     description: "Allows the user to receive anti-xray alerts."
     default: op
+  owml.bypass:
+    description: "Игрок не проверяется (группа bot). У OP по умолчанию нет — выдавать явно."
+    default: false
   owml.teleport:
     description: "Allows the user to teleport to decoy ore locations by clicking alerts."
     default: op

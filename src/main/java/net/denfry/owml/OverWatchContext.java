@@ -1,10 +1,10 @@
 package net.denfry.owml;
 
 import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
 import net.denfry.owml.config.ConfigManager;
 import net.denfry.owml.detection.BehaviorProfileManager;
 import net.denfry.owml.detection.DetectionOrchestrator;
-import net.denfry.owml.integrations.AntiCheatIntegration;
 import net.denfry.owml.managers.DecoyService;
 import net.denfry.owml.managers.IDecoyService;
 import net.denfry.owml.managers.IStatsService;
@@ -16,76 +16,59 @@ import net.denfry.owml.storage.YamlStatsRepository;
 import net.denfry.owml.storage.YamlSuspiciousRepository;
 
 public class OverWatchContext {
-    private final OverWatchML plugin;
-    private final IStatsService statsService;
-    private final ISuspiciousService suspiciousService;
-    private final IDecoyService decoyService;
-    private final DetectionPipeline detectionPipeline;
-    private final BehaviorProfileManager profileManager;
-    private final DetectionOrchestrator detectionOrchestrator;
+   private final OverWatchML plugin;
+   private final IStatsService statsService;
+   private final ISuspiciousService suspiciousService;
+   private final IDecoyService decoyService;
+   private final DetectionPipeline detectionPipeline;
+   private final BehaviorProfileManager profileManager;
+   private final DetectionOrchestrator detectionOrchestrator;
 
-    public OverWatchContext(OverWatchML plugin, ConfigManager configManager) {
-        this.plugin = plugin;
-        
-        // Stats
-        this.statsService = new StatsService(
-            new YamlStatsRepository(plugin),
-            configManager.getNaturalOres()
-        );
-        
-        // Suspicious
-        this.suspiciousService = new SuspiciousService(
-            new YamlSuspiciousRepository(plugin),
-            plugin.getConfig().getInt("ml.autoAnalysis.suspiciousThreshold", 15)
-        );
+   public OverWatchContext(OverWatchML plugin, ConfigManager configManager) {
+      this.plugin = plugin;
+      this.statsService = new StatsService(new YamlStatsRepository(plugin), configManager.getNaturalOres());
+      this.suspiciousService = new SuspiciousService(new YamlSuspiciousRepository(plugin), plugin.getConfig().getInt("ml.autoAnalysis.suspiciousThreshold", 15));
+      this.decoyService = new DecoyService(plugin, configManager);
+      this.detectionPipeline = new DetectionPipeline(plugin);
+      this.profileManager = new BehaviorProfileManager();
+      this.detectionOrchestrator = new DetectionOrchestrator(plugin, this.profileManager, new ArrayList<>());
+   }
 
-        // Decoy
-        this.decoyService = new DecoyService(plugin, configManager);
+   public void loadAll() {
+      this.statsService.load();
+      this.suspiciousService.load();
+   }
 
-        // ML v2 Pipeline
-        this.detectionPipeline = new DetectionPipeline(plugin);
+   public CompletableFuture<Void> saveAll() {
+      return CompletableFuture.allOf(this.statsService.save(), this.suspiciousService.save());
+   }
 
-        // Architectural refactoring: BehaviorProfileManager and DetectionOrchestrator
-        this.profileManager = new BehaviorProfileManager();
-        this.detectionOrchestrator = new DetectionOrchestrator(plugin, profileManager, new ArrayList<AntiCheatIntegration>());
-    }
+   public void shutdown() {
+      this.detectionPipeline.shutdown();
+      this.detectionOrchestrator.shutdown();
+   }
 
-    public void loadAll() {
-        statsService.load();
-        suspiciousService.load();
-    }
+   public IStatsService getStatsService() {
+      return this.statsService;
+   }
 
-    public void saveAll() {
-        statsService.save();
-        suspiciousService.save();
-    }
+   public ISuspiciousService getSuspiciousService() {
+      return this.suspiciousService;
+   }
 
-    public void shutdown() {
-        detectionPipeline.shutdown();
-        detectionOrchestrator.shutdown();
-    }
+   public IDecoyService getDecoyService() {
+      return this.decoyService;
+   }
 
-    public IStatsService getStatsService() {
-        return statsService;
-    }
+   public DetectionPipeline getDetectionPipeline() {
+      return this.detectionPipeline;
+   }
 
-    public ISuspiciousService getSuspiciousService() {
-        return suspiciousService;
-    }
+   public BehaviorProfileManager getProfileManager() {
+      return this.profileManager;
+   }
 
-    public IDecoyService getDecoyService() {
-        return decoyService;
-    }
-
-    public DetectionPipeline getDetectionPipeline() {
-        return detectionPipeline;
-    }
-
-    public BehaviorProfileManager getProfileManager() {
-        return profileManager;
-    }
-
-    public DetectionOrchestrator getDetectionOrchestrator() {
-        return detectionOrchestrator;
-    }
+   public DetectionOrchestrator getDetectionOrchestrator() {
+      return this.detectionOrchestrator;
+   }
 }
